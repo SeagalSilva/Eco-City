@@ -1,5 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
+import ConfirmationModal from './ConfirmationModal';
+import GovernmentActions from './GovernmentActions';
 import { db } from '@/lib/firebase';
 import { ref, onValue, update, get, push, remove } from 'firebase/database';
 import { User } from 'firebase/auth';
@@ -15,7 +17,7 @@ interface RoomToClean {
 }
 
 export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorId: string }) {
-    const [view, setView] = useState<'menu' | 'my-apartment' | 'rent' | 'staff' | 'browse'>('menu');
+    const [view, setView] = useState<'menu' | 'my-apartment' | 'rent' | 'staff' | 'browse' | 'mailbox'>('menu');
     const [hasApartment, setHasApartment] = useState(false);
     const [rentedInfo, setRentedInfo] = useState<{type: string} | null>(null);
     const [balance, setBalance] = useState(0);
@@ -29,6 +31,19 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     });
     const [roomsToClean, setRoomsToClean] = useState<RoomToClean[]>([]);
     const [rentedUnits, setRentedUnits] = useState<Record<string, any>>({});
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [isGovtModalOpen, setIsGovtModalOpen] = useState(false);
+    const [isGovernment, setIsGovernment] = useState(false);
+    const [currentConfirm, setCurrentConfirm] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
+    
+    // Mailbox system
+    const [letters, setLetters] = useState<any[]>([]);
+    const [selectedLetter, setSelectedLetter] = useState<any | null>(null);
+
+    const triggerConfirmation = (title: string, message: string, onConfirm: () => void) => {
+        setCurrentConfirm({title, message, onConfirm});
+        setIsConfirmOpen(true);
+    }
 
     useEffect(() => {
         const stateRef = ref(db, `game_states/${user.uid}`);
@@ -74,6 +89,14 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
             }
         });
 
+        const sectorInfoRef = ref(db, `departments/${sectorId}`);
+        const unsubSectorInfo = onValue(sectorInfoRef, (snap) => {
+            if (snap.exists()) {
+                const data = snap.val();
+                setIsGovernment(data.type === 'GOVERNMENT' && data.govtSubtype === 'ADMINISTRATION');
+            }
+        });
+
         const unitsRef = ref(db, `departments/${sectorId}/rented_units`);
         const unsubUnits = onValue(unitsRef, (snap) => {
             if (snap.exists()) setRentedUnits(snap.val());
@@ -90,11 +113,22 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
             }
         });
 
+        const unsubMailbox = onValue(ref(db, `game_states/${user.uid}/mailbox`), (snap) => {
+            const data = snap.val();
+            if (data) {
+                setLetters(Object.entries(data).map(([id, item]: [string, any]) => ({ id, ...item })));
+            } else {
+                setLetters([]);
+            }
+        });
+
         return () => {
             unsub();
             unsubSettings();
+            unsubSectorInfo();
             unsubUnits();
             unsubClean();
+            unsubMailbox();
         };
     }, [user.uid, sectorId]);
 
@@ -163,13 +197,13 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     };
 
     const cleanRoom = async (room: RoomToClean) => {
-        const confirmClean = window.confirm(`This will take ${Math.ceil(room.cleaningTimeMs / 1000)} seconds. Proceed?`);
-        if (!confirmClean) return;
-        alert(`Starting cleaning... Wait ${Math.ceil(room.cleaningTimeMs / 1000)}s`);
-        setTimeout(async () => {
-            await remove(ref(db, `departments/${sectorId}/roomsToClean/${room.id}`));
-            alert('Room cleaned!');
-        }, room.cleaningTimeMs);
+        triggerConfirmation('Clean Room', `This will take ${Math.ceil(room.cleaningTimeMs / 1000)} seconds. Proceed?`, async () => {
+            alert(`Starting cleaning... Wait ${Math.ceil(room.cleaningTimeMs / 1000)}s`);
+            setTimeout(async () => {
+                await remove(ref(db, `departments/${sectorId}/roomsToClean/${room.id}`));
+                alert('Room cleaned!');
+            }, room.cleaningTimeMs);
+        });
     };
 
     const employeeSleep = async () => {
@@ -181,29 +215,128 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     };
 
     const handleCheckout = async () => {
-        const confirmCheckout = window.confirm("Are you sure you want to check out of your unit?");
-        if (!confirmCheckout) return;
+        triggerConfirmation('Checkout Confirm', "Are you sure you want to check out of your unit?", async () => {
+            const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+            const aptData = snap.val();
 
-        const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-        const aptData = snap.val();
-
-        if (aptData) {
-            const timeRentedMs = Date.now() - aptData.rentedAt;
-            const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
-            
-            await push(ref(db, `departments/${sectorId}/roomsToClean`), {
-                roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
-                type: aptData.type,
-                timeRented: timeRentedMs,
-                cleaningTimeMs
-            });
-            
-            await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
-            await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-            alert('Checked out successfully.');
-            setView('menu');
-        }
+            if (aptData) {
+                const timeRentedMs = Date.now() - aptData.rentedAt;
+                const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
+                
+                await push(ref(db, `departments/${sectorId}/roomsToClean`), {
+                    roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
+                    type: aptData.type,
+                    timeRented: timeRentedMs,
+                    cleaningTimeMs
+                });
+                
+                await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
+                await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+                alert('Checked out successfully.');
+                setView('menu');
+            }
+        });
     };
+
+    if (view === 'mailbox') {
+        const deleteLetter = async (id: string) => {
+            await remove(ref(db, `game_states/${user.uid}/mailbox/${id}`));
+            setSelectedLetter(null);
+        };
+
+        return (
+            <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/10 shadow-2xl relative space-y-6 animate-in fade-in duration-300">
+                <div className="flex justify-between items-center border-b border-white/10 pb-4">
+                    <div className="flex items-center gap-3">
+                        <span className="text-3xl">📬</span>
+                        <div>
+                            <h3 className="font-extrabold text-xl text-white tracking-tight uppercase italic">Caixa de Correio Civil</h3>
+                            <p className="text-[10px] text-slate-500 font-mono">Residência no Setor: {sectorId.slice(0, 8)}</p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => { setView('menu'); setSelectedLetter(null); }} 
+                        className="text-xs font-mono px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all uppercase tracking-widest"
+                    >
+                        Voltar
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                    {/* Letters list */}
+                    <div className="space-y-3">
+                        <h4 className="text-xs font-mono text-slate-500 uppercase tracking-widest">Envelopes Recebidos</h4>
+                        {letters.map((letter) => (
+                            <button 
+                                key={letter.id}
+                                onClick={() => setSelectedLetter(letter)}
+                                className={`w-full p-4 rounded-2xl hover:bg-white/5 border transition-all text-left flex justify-between items-center ${selectedLetter?.id === letter.id ? 'border-cyan-500 bg-cyan-950/10' : 'border-white/5 bg-black/20'}`}
+                            >
+                                <div className="space-y-1">
+                                    <p className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                                        <span>💌</span> {letter.subject || 'Correspondência Oficial'}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500 font-mono">Remetente: {letter.sender}</p>
+                                </div>
+                                <span className="text-[9px] text-slate-600 font-mono">
+                                    {new Date(letter.receivedAt).toLocaleDateString()}
+                                </span>
+                            </button>
+                        ))}
+                        {letters.length === 0 && (
+                            <p className="text-xs text-slate-500 font-mono italic p-6 border border-dashed border-white/10 rounded-2xl text-center">
+                                Nenhum envelope na caixa dos correios de momento.
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Letter contents with animated envelope look */}
+                    <div className="p-6 bg-amber-50 rounded-3xl text-slate-900 border-2 border-amber-200 min-h-[250px] shadow-lg flex flex-col justify-between relative overflow-hidden">
+                        {/* Stamp ornament */}
+                        <div className="absolute top-4 right-4 w-12 h-12 border-2 border-dashed border-amber-800/20 text-amber-900/20 flex items-center justify-center font-mono font-bold text-[8px] uppercase tracking-widest select-none pointer-events-none">
+                            POSTAGEM
+                        </div>
+
+                        {selectedLetter ? (
+                            <div className="space-y-6">
+                                <div className="border-b border-amber-900/10 pb-4">
+                                    <p className="text-[9px] font-mono font-medium text-amber-800/80 mb-1">
+                                        DATA DE EXPEDIÇÃO: {new Date(selectedLetter.receivedAt).toLocaleString()}
+                                    </p>
+                                    <p className="text-sm font-black tracking-tight text-amber-950 uppercase italic font-mono mb-2">
+                                        Assunto: {selectedLetter.subject || 'Sem Assunto'}
+                                    </p>
+                                    <p className="text-xs font-mono font-bold text-amber-900 flex items-center gap-1 text-slate-700">
+                                        Remetente oficial: {selectedLetter.sender || 'Governo'}
+                                    </p>
+                                </div>
+
+                                <p className="text-xs font-mono leading-relaxed whitespace-pre-wrap text-amber-900 font-semibold italic">
+                                    &quot;{selectedLetter.message}&quot;
+                                </p>
+
+                                <div className="pt-4 border-t border-amber-900/10 flex justify-end">
+                                    <button 
+                                        onClick={() => deleteLetter(selectedLetter.id)}
+                                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-mono font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all"
+                                    >
+                                        Triturar Documento (Deletar)
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
+                                <p className="text-amber-900/50 text-6xl select-none animate-bounce">📬</p>
+                                <p className="text-xs font-mono text-amber-900/60 font-black uppercase tracking-widest mt-4">
+                                    Selecione uma carta para ler o conteúdo oficial.
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (view === 'my-apartment') {
         return <ApartmentEditor user={user} sectorId={sectorId} onBack={() => setView('menu')} onCheckout={handleCheckout} />;
@@ -347,6 +480,24 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     const isAdmin = user.email === 'seagalsilva@gmail.com';
     return (
         <div className="space-y-8">
+            <ConfirmationModal 
+                isOpen={isConfirmOpen}
+                title={currentConfirm?.title || ''}
+                message={currentConfirm?.message || ''}
+                onConfirm={() => {
+                    if (currentConfirm) currentConfirm.onConfirm();
+                    setIsConfirmOpen(false);
+                }}
+                onCancel={() => setIsConfirmOpen(false)}
+            />
+            <GovernmentActions
+                isOpen={isGovtModalOpen}
+                onClose={() => setIsGovtModalOpen(false)}
+                sectorId={sectorId}
+                user={user}
+                isEmployee={isStaff}
+                isManager={isManager}
+            />
             <div className="flex items-center gap-2 px-6 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl w-fit">
                 <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-widest animate-pulse">Occupancy: 84%</span>
             </div>
@@ -381,12 +532,37 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                     <h3 className="font-black text-2xl text-slate-200 group-hover:text-blue-400 transition-colors uppercase tracking-tight italic">Browse Units</h3>
                     <p className="text-xs text-slate-400 mt-2 font-medium tracking-wide">View all units in this sector.</p>
                 </button>
+
+                <button 
+                    onClick={() => setView('mailbox')} 
+                    className="relative group p-8 bg-cyan-500/5 border border-cyan-500/20 rounded-3xl hover:border-cyan-500/50 transition-all duration-500 text-left overflow-hidden shadow-xl"
+                >
+                    <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 via-cyan-500/0 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                    <div className="text-5xl mb-6 group-hover:scale-110 transition-transform duration-500 transform-gpu italic flex justify-between items-center">
+                        <span>📬</span>
+                        {letters.length > 0 && (
+                            <span className="bg-red-500 text-white rounded-full text-xs font-mono font-bold px-2 py-0.5 animate-bounce">
+                                {letters.length}
+                            </span>
+                        )}
+                    </div>
+                    <h3 className="font-black text-2xl text-slate-200 group-hover:text-cyan-400 transition-colors uppercase tracking-tight italic">Caixa Postal</h3>
+                    <p className="text-xs text-slate-400 mt-2 font-medium tracking-wide">Leia cartas oficiais enviadas pelo governo.</p>
+                </button>
             </div>
 
             {isStaff && (
                 <div className="mt-8">
                     <button onClick={() => setView('staff')} className="w-full p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-xl hover:bg-indigo-500 hover:text-white transition-all font-mono font-bold text-indigo-400 uppercase tracking-widest text-sm flex items-center justify-center gap-2">
                         <span>👔</span> Staff Terminal {roomsToClean.length > 0 && <span className="bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] animate-pulse">{roomsToClean.length}</span>}
+                    </button>
+                </div>
+            )}
+
+            {isGovernment && (
+                <div className="mt-8">
+                    <button onClick={() => setIsGovtModalOpen(true)} className="w-full p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl hover:bg-cyan-500 hover:text-black transition-all font-mono font-bold text-cyan-400 uppercase tracking-widest text-sm flex items-center justify-center gap-2">
+                        <span>🏛️</span> Government Terminal
                     </button>
                 </div>
             )}

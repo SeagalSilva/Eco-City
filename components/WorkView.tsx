@@ -47,6 +47,8 @@ export default function WorkView({ district, onBack }: { district: string | null
     const [isWorking, setIsWorking] = useState(false);
     const [workProgress, setWorkProgress] = useState(0);
     const [adConfirmationInput, setAdConfirmationInput] = useState('');
+    const [selectedProjectId, setSelectedProjectId] = useState('');
+    const [currentProjects, setCurrentProjects] = useState<any[]>([]);
 
     const authUser = auth.currentUser;
 
@@ -80,6 +82,11 @@ export default function WorkView({ district, onBack }: { district: string | null
             setActiveEmployeesCount(counts);
         });
 
+        const unsubProjects = onValue(ref(db, 'construction_projects'), (snapshot) => {
+            const data = snapshot.val();
+            setCurrentProjects(data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : []);
+        });
+
         if (authUser) {
             const unsubWork = onValue(ref(db, `game_states/${authUser.uid}`), (snapshot) => {
                 const data = snapshot.val();
@@ -94,13 +101,16 @@ export default function WorkView({ district, onBack }: { district: string | null
                     setUserWorkState({ tasksCompletedToday: 0 });
                 }
             });
-            return () => { unsubJobs(); unsubDeps(); unsubWork(); unsubTags(); unsubAllWork(); };
+            return () => { unsubJobs(); unsubDeps(); unsubWork(); unsubTags(); unsubAllWork(); unsubProjects(); };
         }
 
-        return () => { unsubJobs(); unsubDeps(); unsubTags(); unsubAllWork(); };
+        return () => { unsubJobs(); unsubDeps(); unsubTags(); unsubAllWork(); unsubProjects(); };
     }, [authUser]);
 
     const activeJob = jobs.find(j => j.id === userWorkState?.activeJobId);
+    const activeJobDept = departments.find(d => d.id === activeJob?.departmentId);
+    const isConstructionCompany = activeJobDept?.type === 'CONSTRUCTION_COMPANY' || activeJobDept?.type === 'CONSTRUCTION';
+    const companyProjects = currentProjects.filter(p => !p.deedClaimed && p.hiredCompanySectorId === activeJob?.departmentId && p.status === 'UNDER_CONSTRUCTION');
 
     const activeTaskIdx = userWorkState?.tasksCompletedToday || 0;
     const activeTaskStr = activeJob?.tasks?.[activeTaskIdx] || '';
@@ -182,9 +192,27 @@ export default function WorkView({ district, onBack }: { district: string | null
             await update(ref(db, `game_states/${authUser.uid}`), {
                 tasksCompletedToday: newCount
             });
+
+            // If working in construction and selected a pending project, progress it!
+            if (isConstructionCompany && selectedProjectId) {
+                const projRef = ref(db, `construction_projects/${selectedProjectId}`);
+                await runTransaction(projRef, (proj) => {
+                    if (proj) {
+                        const nextProg = Math.min(100, (proj.progress || 0) + 10);
+                        proj.progress = nextProg;
+                        if (nextProg === 100) {
+                            proj.status = 'COMPLETED';
+                        }
+                    }
+                    return proj;
+                });
+                alert('Missão Concluída! Adicionou +10% de progresso à empreitada civil contratada.');
+            } else {
+                alert('Task completed successfully!');
+            }
+
             setIsWorking(false);
             setWorkProgress(0);
-            alert('Task completed successfully!');
         } catch (e: any) {
             handleDatabaseError(e, OperationType.UPDATE, `game_states/${authUser.uid}`);
             setIsWorking(false);
@@ -316,7 +344,7 @@ export default function WorkView({ district, onBack }: { district: string | null
                         </div>
 
                         {/* Working Area */}
-                        <div className="p-10 bg-black/40 border border-white/5 rounded-[2.5rem] flex flex-col items-center justify-center gap-10 text-center relative overflow-hidden group">
+                        <div className="p-10 bg-black/40 border border-white/5 rounded-[2.5rem] flex flex-col items-center justify-center gap-10 text-center relative overflow-hidden group min-h-[400px]">
                            {isWorking ? (
                                <>
                                    <div className="relative">
@@ -339,6 +367,30 @@ export default function WorkView({ district, onBack }: { district: string | null
                                    <div className="space-y-2">
                                        <p className="text-slate-400 font-mono text-sm max-w-[200px] italic">Ready to commence the next objective in the grid.</p>
                                    </div>
+
+                                   {isConstructionCompany && (
+                                       <div className="w-full max-w-xs space-y-2 p-4 bg-purple-500/5 border border-purple-500/20 rounded-2xl text-left mx-auto">
+                                           <p className="text-[10px] font-mono text-purple-400 font-black uppercase tracking-widest text-center">
+                                               🏗️ Selecionar Obra a Progredir
+                                           </p>
+                                           <select
+                                               value={selectedProjectId}
+                                               onChange={(e) => setSelectedProjectId(e.target.value)}
+                                               className="w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-purple-500 font-mono outline-none"
+                                           >
+                                               <option value="">-- Trabalho Interno (Sem Obra) --</option>
+                                               {companyProjects.map(proj => (
+                                                   <option key={proj.id} value={proj.id} className="bg-slate-950 text-white font-mono text-xs">
+                                                       {proj.name} ({proj.progress}%)
+                                                   </option>
+                                               ))}
+                                           </select>
+                                           <p className="text-[9px] text-slate-500 leading-normal text-center italic">
+                                               Garante o envio de esforços (+10% por missão) para concluir a infraestrutura.
+                                           </p>
+                                       </div>
+                                   )}
+
                                    {(userWorkState?.tasksCompletedToday || 0) < (activeJob.tasks?.length || 1) ? (
                                        activeTag?.type === 'WATCH_ADS' ? (
                                            <div className="w-full space-y-4">

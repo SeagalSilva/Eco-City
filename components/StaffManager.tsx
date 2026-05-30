@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import ConfirmationModal from './ConfirmationModal';
 import { db } from '@/lib/firebase';
 import { ref, onValue, update, get } from 'firebase/database';
 
@@ -17,6 +18,13 @@ interface Employee {
 
 export default function StaffManager({ departmentId, isManager }: StaffManagerProps) {
     const [employees, setEmployees] = useState<Employee[]>([]);
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [currentConfirm, setCurrentConfirm] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
+
+    const triggerConfirmation = (title: string, message: string, onConfirm: () => void) => {
+        setCurrentConfirm({title, message, onConfirm});
+        setIsConfirmOpen(true);
+    }
 
     useEffect(() => {
         // Fetch jobs in this department first to map IDs to titles
@@ -52,22 +60,33 @@ export default function StaffManager({ departmentId, isManager }: StaffManagerPr
     }, [departmentId]);
 
     const fireEmployee = async (uid: string) => {
-        if (!confirm('Are you sure you want to fire this employee?')) return;
-        try {
-            await update(ref(db, `game_states/${uid}`), {
-                activeJobId: null
-            });
-            alert('Employee fired.');
-        } catch (e) {
-            console.error(e);
-            alert('Failed to fire employee.');
-        }
+        triggerConfirmation('Fire Employee', 'Are you sure you want to fire this employee?', async () => {
+            try {
+                await update(ref(db, `game_states/${uid}`), {
+                    activeJobId: null
+                });
+                alert('Employee fired.');
+            } catch (e) {
+                console.error(e);
+                alert('Failed to fire employee.');
+            }
+        });
     };
 
     if (!isManager) return null;
 
     return (
         <div className="mt-8 p-6 bg-red-500/5 border border-red-500/20 rounded-2xl">
+            <ConfirmationModal 
+                isOpen={isConfirmOpen}
+                title={currentConfirm?.title || ''}
+                message={currentConfirm?.message || ''}
+                onConfirm={() => {
+                    if (currentConfirm) currentConfirm.onConfirm();
+                    setIsConfirmOpen(false);
+                }}
+                onCancel={() => setIsConfirmOpen(false)}
+            />
             <h4 className="font-bold text-red-400 mb-4 uppercase tracking-widest font-mono text-sm flex items-center gap-2">
                 <span>🔥</span> Personnel Management
             </h4>

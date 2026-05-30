@@ -67,7 +67,13 @@ export default function CityMap({ onSelect }: { onSelect: (id: string) => void }
                         {/* Hover glow effect */}
                         <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-radial from-emerald-500/10 to-transparent pointer-events-none" />
                         
-                        <div className="text-5xl md:text-6xl mb-6 transform group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500">{loc.icon || '🏢'}</div>
+                        {loc.icon && loc.icon.startsWith('http') ? (
+                            <div className="w-16 h-16 md:w-20 md:h-20 mb-6 flex items-center justify-center">
+                                <img src={loc.icon} alt={loc.name} className="w-full h-full object-contain transform group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500" />
+                            </div>
+                        ) : (
+                            <div className="text-5xl md:text-6xl mb-6 transform group-hover:scale-110 group-hover:-rotate-6 transition-transform duration-500">{loc.icon || '🏢'}</div>
+                        )}
                         <div className="space-y-1">
                             <h3 className="font-bold text-lg md:text-xl text-slate-100 group-hover:text-emerald-400 transition-colors uppercase tracking-tight">{loc.name}</h3>
                             <p className="text-xs text-slate-500 font-medium tracking-wide group-hover:text-slate-400 transition-colors line-clamp-1">{loc.description}</p>

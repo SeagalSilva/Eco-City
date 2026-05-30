@@ -15,6 +15,7 @@ interface Department {
 
 import BankMenu from './BankMenu';
 import ApartmentsMenu from './ApartmentsMenu';
+import GovernmentMenu from './GovernmentMenu';
 
 import { get } from 'firebase/database';
 
@@ -56,6 +57,10 @@ export default function SectorView({ user, sectorId, onBack }: { user: User, sec
             return <BankMenu user={user} sectorId={sector.id} />;
         }
 
+        if (sector.type === 'GOVERNMENT') {
+            return <GovernmentMenu user={user} sectorId={sector.id} />;
+        }
+
         
         return (
             <div className="text-center p-12 bg-white/5 rounded-2xl border border-white/10 font-mono text-slate-400">
@@ -73,8 +78,12 @@ export default function SectorView({ user, sectorId, onBack }: { user: User, sec
                 <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
                 <div className="flex justify-between items-start mb-8">
                     <div className="flex items-center gap-6">
-                        <div className="text-6xl bg-white/5 p-6 rounded-[2rem] shadow-xl">
-                            {sector.icon || '🏢'}
+                        <div className="bg-white/5 p-6 rounded-[2rem] shadow-xl flex items-center justify-center w-28 h-28">
+                            {sector.icon && sector.icon.startsWith('http') ? (
+                                <img src={sector.icon} alt={sector.name} className="w-16 h-16 object-contain" />
+                            ) : (
+                                <span className="text-6xl">{sector.icon || '🏢'}</span>
+                            )}
                         </div>
                         <div>
                             <p className="text-sm text-emerald-500 font-mono font-black uppercase tracking-[0.2em] mb-1">

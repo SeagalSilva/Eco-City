@@ -1,5 +1,8 @@
 'use client';
+import ConfirmationModal from './ConfirmationModal';
+import BaseModal from './BaseModal';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { User } from 'firebase/auth';
 import { db, handleDatabaseError, OperationType } from '@/lib/firebase';
 import { ref, onValue, push, remove, update, set } from 'firebase/database';
@@ -49,6 +52,10 @@ interface UserData {
     displayName: string;
 }
 
+const generateProtocolToken = () => {
+    return Math.random().toString(36).substring(2, 11);
+};
+
 export default function AdminPanel({ user, onBack }: { user: User; onBack: () => void }) {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [jobs, setJobs] = useState<Job[]>([]);
@@ -58,6 +65,8 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     const [systemSettings, setSystemSettings] = useState({ taxiPrice: 15 });
     const [levels, setLevels] = useState<{ id: string, level: number, xpRequired: number, reward: string }[]>([]);
     const [activeTab, setActiveTab] = useState('settings');
+    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+    const [currentConfirm, setCurrentConfirm] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
     
     // Protocol Modal State
     const [isProtocolModalOpen, setIsProtocolModalOpen] = useState(false);
@@ -83,6 +92,9 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     const [roomsBasic, setRoomsBasic] = useState(30);
     const [roomsPremium, setRoomsPremium] = useState(30);
     const [roomsPenthouse, setRoomsPenthouse] = useState(30);
+    const [govtSubtype, setGovtSubtype] = useState('ADMINISTRATION');
+    const [icons8Query, setIcons8Query] = useState('');
+    const [icons8Results, setIcons8Results] = useState<string[]>([]);
 
     const SECTOR_TYPES = [
         { id: 'BANK', label: 'Bank' },
@@ -176,7 +188,7 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
         setProtocolType(tag.type || 'WATCH_ADS');
         setProtocolGoal(tag.targetValue || 1);
         setProtocolAdLink(tag.adLink || '');
-        const token = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36);
+        const token = generateProtocolToken();
         setProtocolConfirmationLink(tag.confirmationLink || (typeof window !== 'undefined' ? `${window.location.origin}/verify?token=${token}` : ''));
         setIsProtocolModalOpen(true);
     };
@@ -210,9 +222,15 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     };
 
     const removeTaskTag = async (id: string) => {
-        if (!confirm('Remove this task tag?')) return;
-        await remove(ref(db, `task_tags/${id}`));
+        triggerConfirmation('Remove Protocol', 'Remove this task tag?', async () => {
+            await remove(ref(db, `task_tags/${id}`));
+        });
     };
+
+    const triggerConfirmation = (title: string, message: string, onConfirm: () => void) => {
+        setCurrentConfirm({title, message, onConfirm});
+        setIsConfirmOpen(true);
+    }
 
     const openAddSector = () => {
         setEditingSector(null);
@@ -251,6 +269,10 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                 updatedAt: new Date().toISOString()
             };
 
+            if (sectorType === 'GOVERNMENT') {
+                sectorData.govtSubtype = govtSubtype;
+            }
+
             if (sectorType === 'APARTMENT') {
                 sectorData.rooms = {
                     basic: 5,
@@ -274,27 +296,23 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     };
 
     const removeDepartment = async (id: string, name: string) => {
-        if (!confirm(`Are you sure you want to delete the sector "${name}"?`)) return;
-        
-        console.log("Removing sector with ID:", id, "Name:", name);
-        try {
-            // Remove related jobs
-            const jobsToRemove = jobs.filter(job => job.departmentId === id);
-            console.log("Found jobs to remove:", jobsToRemove.length);
-            for (const job of jobsToRemove) {
-                console.log("Removing job:", job.id);
-                await remove(ref(db, `jobs/${job.id}`));
-            }
+        triggerConfirmation('Delete Sector', `Are you sure you want to delete the sector "${name}"? This will remove all associated jobs, rooms, and rented units!`, async () => {
+            try {
+                // Remove related jobs
+                const jobsToRemove = jobs.filter(job => job.departmentId === id);
+                for (const job of jobsToRemove) {
+                    await set(ref(db, `jobs/${job.id}`), null);
+                }
 
-            // Remove the sector itself
-            console.log("Removing department at path:", `departments/${id}`);
-            await remove(ref(db, `departments/${id}`));
-            alert('Sector and related data removed successfully!');
-        } catch (e: any) {
-            console.error("Error removing sector:", e);
-            handleDatabaseError(e, OperationType.DELETE, `departments/${id}`);
-            alert('Error removing sector: ' + e.message);
-        }
+                // Remove the sector itslef (and nested data)
+                await set(ref(db, `departments/${id}`), null);
+
+                alert('Sector and all associated data successfully removed.');
+            } catch (e: any) {
+                console.error("Error removing sector:", e);
+                alert('Error removing sector: ' + e.message);
+            }
+        });
     };
 
     const openAddJob = (initialDeptId?: string) => {
@@ -387,44 +405,44 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     };
 
     const seedDefaults = async () => {
-        if (!confirm('Seed default departments and jobs?')) return;
-        
-        const defaultDeps = [
-            { name: 'Bank', icon: '🏦', description: 'Financial district' },
-            { name: 'Apartments', icon: '🏠', description: 'Living Quarters' },
-            { name: 'Shopping Mall', icon: '🛍️', description: 'Resource Market' },
-            { name: 'Service Area', icon: '🛠️', description: 'Maintenance' },
-            { name: 'Government', icon: '🏛️', description: 'Policy Controls' },
-            { name: 'Commercial', icon: '🏢', description: 'Biz & Trade' }
-        ];
+        triggerConfirmation('Restore Defaults', 'Seed default departments and jobs?', async () => {
+            const defaultDeps = [
+                { name: 'Bank', icon: '🏦', description: 'Financial district' },
+                { name: 'Apartments', icon: '🏠', description: 'Living Quarters' },
+                { name: 'Shopping Mall', icon: '🛍️', description: 'Resource Market' },
+                { name: 'Service Area', icon: '🛠️', description: 'Maintenance' },
+                { name: 'Government', icon: '🏛️', description: 'Policy Controls' },
+                { name: 'Commercial', icon: '🏢', description: 'Biz & Trade' }
+            ];
 
-        const defaultItemDefs = [
-            { name: 'Cama', icon: '🛏️' },
-            { name: 'Geleira', icon: '🧊' },
-            { name: 'Fogão', icon: '🍳' },
-            { name: 'Guarda fato', icon: '👕' },
-            { name: 'PC', icon: '💻' }
-        ];
+            const defaultItemDefs = [
+                { name: 'Cama', icon: '🛏️' },
+                { name: 'Geleira', icon: '🧊' },
+                { name: 'Fogão', icon: '🍳' },
+                { name: 'Guarda fato', icon: '👕' },
+                { name: 'PC', icon: '💻' }
+            ];
 
-        for (const dep of defaultDeps) {
-            const newDepRef = push(ref(db, 'departments'));
-            await set(newDepRef, { ...dep, createdAt: new Date().toISOString() });
-            
-            // Add a default job for each department
-            await push(ref(db, 'jobs'), {
-                title: `${dep.name} Assistant`,
-                pay: 30 + Math.floor(Math.random() * 50),
-                requirements: 'Level 1 basic training',
-                tasks: ['Log shift start', 'Perform routine inspection', 'Finalize reports'],
-                shiftDuration: 15,
-                departmentId: newDepRef.key,
-                createdAt: new Date().toISOString()
-            });
-        }
+            for (const dep of defaultDeps) {
+                const newDepRef = push(ref(db, 'departments'));
+                await set(newDepRef, { ...dep, createdAt: new Date().toISOString() });
+                
+                // Add a default job for each department
+                await push(ref(db, 'jobs'), {
+                    title: `${dep.name} Assistant`,
+                    pay: 30 + Math.floor(Math.random() * 50),
+                    requirements: 'Level 1 basic training',
+                    tasks: ['Log shift start', 'Perform routine inspection', 'Finalize reports'],
+                    shiftDuration: 15,
+                    departmentId: newDepRef.key,
+                    createdAt: new Date().toISOString()
+                });
+            }
 
-        for (const item of defaultItemDefs) {
-            await push(ref(db, 'item_definitions'), { ...item, createdAt: new Date().toISOString() });
-        }
+            for (const item of defaultItemDefs) {
+                await push(ref(db, 'item_definitions'), { ...item, createdAt: new Date().toISOString() });
+            }
+        });
     };
 
     const saveSystemSettings = async () => {
@@ -434,6 +452,17 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
 
     return (
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-6 md:p-10 shadow-2xl text-slate-100 max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <ConfirmationModal 
+                isOpen={isConfirmOpen}
+                title={currentConfirm?.title || ''}
+                message={currentConfirm?.message || ''}
+                onConfirm={() => {
+                    if (currentConfirm) currentConfirm.onConfirm();
+                    setIsConfirmOpen(false);
+                }}
+                onCancel={() => setIsConfirmOpen(false)}
+            />
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 pb-6 border-b border-white/10 gap-6">
                 <div>
                     <button onClick={onBack} className="text-emerald-400 mb-2 flex items-center gap-2 hover:translate-x-1 transition-transform font-mono text-xs uppercase tracking-widest">&larr; Return to City</button>
@@ -565,17 +594,22 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                                 <div key={dept.id} className="p-6 bg-white/5 rounded-3xl border border-white/5 group hover:border-cyan-500/50 transition-all duration-500 shadow-xl">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex gap-4 items-center">
-                                            <span className="text-4xl bg-white/5 p-3 rounded-2xl">{dept.icon || '🏢'}</span>
+                                            <span className="bg-white/5 p-3 rounded-2xl flex items-center justify-center w-16 h-16">
+                                                {dept.icon && dept.icon.startsWith('http') ? (
+                                                    <img src={dept.icon} alt={dept.name} className="w-10 h-10 object-contain" />
+                                                ) : (
+                                                    <span className="text-4xl">{dept.icon || '🏢'}</span>
+                                                )}
+                                            </span>
                                             <div>
                                                 <p className="font-black text-xl text-cyan-400 tracking-tighter uppercase italic">{dept.name}</p>
                                                 <p className="text-[10px] text-cyan-600 font-mono font-black uppercase tracking-widest">{SECTOR_TYPES.find(t => t.id === dept.type)?.label || dept.type || 'BANCO'}</p>
-                                                <p className="text-[9px] text-slate-600 font-mono italic">Reference ID: {dept.id}</p>
                                             </div>
                                         </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => openAddJob(dept.id)} className="p-2 text-amber-500/50 hover:text-amber-500 hover:bg-amber-500/10 rounded-xl transition-all font-mono font-black text-[10px] uppercase">+ Job</button>
-                                            <button onClick={() => openEditSector(dept)} className="p-2 text-cyan-500/50 hover:text-cyan-500 hover:bg-cyan-500/10 rounded-xl transition-all font-mono font-black text-[10px] uppercase">Edit</button>
-                                            <button onClick={() => removeDepartment(dept.id, dept.name)} className="p-2 text-red-500/50 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all font-mono font-black text-[10px] uppercase">Remove</button>
+                                        <div className="flex flex-col gap-2">
+                                            <button onClick={() => openEditSector(dept)} className="px-3 py-1 bg-cyan-600/10 text-cyan-500 border border-cyan-500/30 hover:bg-cyan-600 hover:text-white rounded-lg transition-all font-mono font-black text-[10px] uppercase">Edit</button>
+                                            <button onClick={() => openAddJob(dept.id)} className="px-3 py-1 bg-amber-600/10 text-amber-500 border border-amber-500/30 hover:bg-amber-600 hover:text-white rounded-lg transition-all font-mono font-black text-[10px] uppercase">+ Job</button>
+                                            <button onClick={() => removeDepartment(dept.id, dept.name)} className="px-3 py-1 bg-red-600/10 text-red-500 border border-red-500/30 hover:bg-red-600 hover:text-white rounded-lg transition-all font-mono font-black text-[10px] uppercase">Remove</button>
                                         </div>
                                     </div>
                                     <p className="text-xs text-slate-400 font-medium leading-relaxed italic">{dept.description || 'No data recorded.'}</p>
@@ -615,187 +649,293 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                 )}
 
                     {/* Protocol Modal */}
-                    {isProtocolModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                            <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] w-full max-w-md p-8 shadow-2xl relative overflow-y-auto max-h-[90vh] custom-scrollbar">
-                                <div className="absolute top-0 right-0 p-4">
-                                    <button onClick={() => setIsProtocolModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">&times; Close</button>
+                    <BaseModal isOpen={isProtocolModalOpen} onClose={() => setIsProtocolModalOpen(false)} title={editingProtocol ? 'Refactor Protocol' : 'Sync New Protocol'}>
+                        <form onSubmit={saveProtocol} className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Protocol Label</label>
+                                <input 
+                                    type="text" 
+                                    value={protocolLabel} 
+                                    onChange={(e) => setProtocolLabel(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold"
+                                    placeholder="e.g. AD-SKELETON"
+                                    required
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sync Type</label>
+                                    <select 
+                                        value={protocolType}
+                                        onChange={(e) => setProtocolType(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold text-xs"
+                                    >
+                                        {PROTOCOL_TYPES.map(type => (
+                                            <option key={type.id} value={type.id} className="bg-slate-900">{type.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <h3 className="text-2xl font-black font-mono text-pink-400 tracking-tight uppercase italic mb-6">
-                                    {editingProtocol ? 'Refactor Protocol' : 'Sync New Protocol'}
-                                </h3>
-                                <form onSubmit={saveProtocol} className="space-y-6">
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Goal Value</label>
+                                    <input 
+                                        type="number" 
+                                        value={protocolGoal} 
+                                        onChange={(e) => setProtocolGoal(Number(e.target.value))}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-mono font-bold"
+                                        min="1"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            {protocolType === 'WATCH_ADS' && (
+                                <div className="space-y-4">
                                     <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Protocol Label</label>
+                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Ad URL (Redirect To)</label>
                                         <input 
-                                            type="text" 
-                                            value={protocolLabel} 
-                                            onChange={(e) => setProtocolLabel(e.target.value)}
+                                            type="url" 
+                                            value={protocolAdLink} 
+                                            onChange={(e) => setProtocolAdLink(e.target.value)}
                                             className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold"
-                                            placeholder="e.g. AD-SKELETON"
+                                            placeholder="https://example.com/ad"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Confirmation Link (Verification URL)</label>
+                                        <input 
+                                            type="url" 
+                                            value={protocolConfirmationLink} 
+                                            onChange={(e) => setProtocolConfirmationLink(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold"
+                                            placeholder="https://example.com/confirm?token=..."
                                             required
                                         />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sync Type</label>
-                                            <select 
-                                                value={protocolType}
-                                                onChange={(e) => setProtocolType(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold text-xs"
-                                            >
-                                                {PROTOCOL_TYPES.map(type => (
-                                                    <option key={type.id} value={type.id} className="bg-slate-900">{type.label}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Goal Value</label>
-                                            <input 
-                                                type="number" 
-                                                value={protocolGoal} 
-                                                onChange={(e) => setProtocolGoal(Number(e.target.value))}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-mono font-bold"
-                                                min="1"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    {protocolType === 'WATCH_ADS' && (
-                                        <div className="space-y-4">
-                                            <div>
-                                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Ad URL (Redirect To)</label>
-                                                <input 
-                                                    type="url" 
-                                                    value={protocolAdLink} 
-                                                    onChange={(e) => setProtocolAdLink(e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold"
-                                                    placeholder="https://example.com/ad"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Confirmation Link (Verification URL)</label>
-                                                <input 
-                                                    type="url" 
-                                                    value={protocolConfirmationLink} 
-                                                    onChange={(e) => setProtocolConfirmationLink(e.target.value)}
-                                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-pink-500 outline-none transition-all font-bold"
-                                                    placeholder="https://example.com/confirm?token=..."
-                                                    required
-                                                />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="flex gap-4 pt-4">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setIsProtocolModalOpen(false)}
-                                            className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button 
-                                            type="submit"
-                                            className="flex-1 py-3 bg-pink-600 text-black rounded-xl hover:bg-pink-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-pink-500/20"
-                                        >
-                                            {editingProtocol ? 'Update Protocol' : 'Deploy Protocol'}
-                                        </button>
-                                    </div>
-                                </form>
+                                </div>
+                            )}
+                            <div className="flex gap-4 pt-4">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsProtocolModalOpen(false)}
+                                    className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    className="flex-1 py-3 bg-pink-600 text-black rounded-xl hover:bg-pink-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-pink-500/20"
+                                >
+                                    {editingProtocol ? 'Update Protocol' : 'Deploy Protocol'}
+                                </button>
                             </div>
-                        </div>
-                    )}
+                        </form>
+                    </BaseModal>
 
                     {/* Sector Modal */}
-                    {isSectorModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                            <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl relative overflow-y-auto max-h-[90vh] custom-scrollbar">
-                                <div className="absolute top-0 right-0 p-4">
-                                    <button onClick={() => setIsSectorModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">&times; Close</button>
+                    <BaseModal isOpen={isSectorModalOpen} onClose={() => setIsSectorModalOpen(false)} title={editingSector ? 'Edit Sector' : 'Add New Sector'}>
+                        <form onSubmit={saveSector} className="space-y-6">
+                            <div className="flex gap-4">
+                                <div className="w-20">
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Icon</label>
+                                    <input 
+                                        type="text" 
+                                        value={sectorIcon} 
+                                        onChange={(e) => setSectorIcon(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-2xl text-center focus:border-cyan-500 outline-none transition-all truncate"
+                                        placeholder="🏢"
+                                    />
                                 </div>
-                                <h3 className="text-2xl font-black font-mono text-cyan-400 tracking-tight uppercase italic mb-6">
-                                    {editingSector ? 'Edit Sector' : 'Add New Sector'}
-                                </h3>
-                                <form onSubmit={saveSector} className="space-y-6">
-                                    <div className="flex gap-4">
-                                        <div className="w-20">
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Icon</label>
-                                            <input 
-                                                type="text" 
-                                                value={sectorIcon} 
-                                                onChange={(e) => setSectorIcon(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-2xl text-center focus:border-cyan-500 outline-none transition-all"
-                                                placeholder="🏢"
-                                            />
-                                        </div>
-                                        <div className="flex-1">
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Name</label>
-                                            <input 
-                                                type="text" 
-                                                value={sectorName} 
-                                                onChange={(e) => setSectorName(e.target.value)}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold"
-                                                placeholder="e.g. Police HQ"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sector Type</label>
-                                        <select 
-                                            value={sectorType}
-                                            onChange={(e) => setSectorType(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold text-xs"
-                                        >
-                                            {SECTOR_TYPES.map(type => (
-                                                <option key={type.id} value={type.id} className="bg-slate-900">{type.label}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    {sectorType === 'APARTMENT' && (
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Basic Rooms</label>
-                                                <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsBasic} onChange={e => setRoomsBasic(Number(e.target.value))} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Premium Rooms</label>
-                                                <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsPremium} onChange={e => setRoomsPremium(Number(e.target.value))} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Penthouse Rooms</label>
-                                                <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsPenthouse} onChange={e => setRoomsPenthouse(Number(e.target.value))} />
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Description</label>
-                                        <textarea 
-                                            value={sectorDescription} 
-                                            onChange={(e) => setSectorDescription(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all h-24 resize-none"
-                                            placeholder="Describe the sector's purpose..."
-                                        />
-                                    </div>
-                                    <div className="flex gap-4 pt-4">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setIsSectorModalOpen(false)}
-                                            className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button 
-                                            type="submit"
-                                            className="flex-1 py-3 bg-cyan-600 text-black rounded-xl hover:bg-cyan-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-cyan-500/20"
-                                        >
-                                            {editingSector ? 'Update Sector' : 'Authorize Sector'}
-                                        </button>
-                                    </div>
-                                </form>
+                                <div className="flex-1">
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Name</label>
+                                    <input 
+                                        type="text" 
+                                        value={sectorName} 
+                                        onChange={(e) => setSectorName(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold"
+                                        placeholder="e.g. Police HQ"
+                                        required
+                                    />
+                                </div>
                             </div>
-                        </div>
-                    )}
+
+                            {/* Icons8 Icon Search Component */}
+                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-[10px] font-mono text-cyan-400 font-extrabold uppercase tracking-widest">
+                                        🌸 Search Icons8 Library
+                                    </label>
+                                    {sectorIcon && sectorIcon.startsWith('http') && (
+                                        <img src={sectorIcon} alt="Active preview" className="w-8 h-8 object-contain" />
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        value={icons8Query}
+                                        onChange={(e) => setIcons8Query(e.target.value)}
+                                        placeholder="e.g. money-bag, shield, burger, building"
+                                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-cyan-500 outline-none transition-all"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const clean = icons8Query.trim().toLowerCase().replace(/\s+/g, '-');
+                                                if (clean) {
+                                                    setIcons8Results([
+                                                        `https://img.icons8.com/color/96/${clean}.png`,
+                                                        `https://img.icons8.com/3d-fluency/94/${clean}.png`,
+                                                        `https://img.icons8.com/clouds/100/${clean}.png`,
+                                                        `https://img.icons8.com/bubbles/100/${clean}.png`,
+                                                        `https://img.icons8.com/isometric/100/${clean}.png`,
+                                                        `https://img.icons8.com/plasticine/100/${clean}.png`,
+                                                        `https://img.icons8.com/flat-round/100/${clean}.png`
+                                                    ]);
+                                                }
+                                            }
+                                        }}
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            const clean = icons8Query.trim().toLowerCase().replace(/\s+/g, '-');
+                                            if (clean) {
+                                                setIcons8Results([
+                                                    `https://img.icons8.com/color/96/${clean}.png`,
+                                                    `https://img.icons8.com/3d-fluency/94/${clean}.png`,
+                                                    `https://img.icons8.com/clouds/100/${clean}.png`,
+                                                    `https://img.icons8.com/bubbles/100/${clean}.png`,
+                                                    `https://img.icons8.com/isometric/100/${clean}.png`,
+                                                    `https://img.icons8.com/plasticine/100/${clean}.png`,
+                                                    `https://img.icons8.com/flat-round/100/${clean}.png`
+                                                ]);
+                                            }
+                                        }}
+                                        className="px-3 py-2 bg-cyan-600/20 text-cyan-400 hover:bg-cyan-600 hover:text-black rounded-xl font-mono text-xs uppercase"
+                                    >
+                                        Search
+                                    </button>
+                                </div>
+                                
+                                {/* Preset Search buttons */}
+                                <div className="flex flex-wrap gap-1">
+                                    {['bank', 'home', 'shield', 'fireman', 'burger', 'factory', 'government', 'gavel', 'store', 'crane'].map(tag => (
+                                        <button 
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => {
+                                                setIcons8Query(tag);
+                                                setIcons8Results([
+                                                    `https://img.icons8.com/color/96/${tag}.png`,
+                                                    `https://img.icons8.com/3d-fluency/94/${tag}.png`,
+                                                    `https://img.icons8.com/clouds/100/${tag}.png`,
+                                                    `https://img.icons8.com/bubbles/100/${tag}.png`,
+                                                    `https://img.icons8.com/isometric/100/${tag}.png`,
+                                                    `https://img.icons8.com/plasticine/100/${tag}.png`,
+                                                    `https://img.icons8.com/flat-round/100/${tag}.png`
+                                                ]);
+                                            }}
+                                            className="px-2 py-1 bg-white/5 hover:bg-cyan-900/30 text-slate-400 hover:text-white rounded-md text-[10px] font-mono capitalize"
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {icons8Results.length > 0 && (
+                                    <div className="grid grid-cols-4 gap-2 pt-2 max-h-40 overflow-y-auto">
+                                        {icons8Results.map((url, i) => (
+                                            <button 
+                                                key={i}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSectorIcon(url);
+                                                }}
+                                                className={`p-2 bg-black/30 rounded-xl hover:bg-cyan-950/20 border transition-all flex flex-col items-center justify-center gap-1 ${sectorIcon === url ? 'border-cyan-500 bg-cyan-950/10' : 'border-white/10'}`}
+                                            >
+                                                <img 
+                                                    src={url} 
+                                                    alt="icon preview" 
+                                                    width={40} 
+                                                    height={40} 
+                                                    className="object-contain" 
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                    }} 
+                                                />
+                                                <span className="text-[8px] text-slate-500 font-mono">
+                                                    {url.includes('/color/') ? 'Color' : url.includes('/3d-fluency/') ? '3D' : url.includes('/clouds/') ? 'Clouds' : url.includes('/bubbles/') ? 'Bubbles' : url.includes('/isometric/') ? 'Iso' : url.includes('/plasticine/') ? 'Clay' : 'Flat'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sector Type</label>
+                                <select 
+                                    value={sectorType}
+                                    onChange={(e) => setSectorType(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold text-xs"
+                                >
+                                    {SECTOR_TYPES.map(type => (
+                                        <option key={type.id} value={type.id} className="bg-slate-900">{type.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {sectorType === 'GOVERNMENT' && (
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Government Subtype</label>
+                                    <select 
+                                        value={govtSubtype}
+                                        onChange={(e) => setGovtSubtype(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold text-xs"
+                                    >
+                                        <option value="ADMINISTRATION" className="bg-slate-900">Administration</option>
+                                        <option value="FINANCE_AGENCY" className="bg-slate-900">Finance Agency</option>
+                                    </select>
+                                </div>
+                            )}
+                            {sectorType === 'APARTMENT' && (
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Basic Rooms</label>
+                                        <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsBasic} onChange={e => setRoomsBasic(Number(e.target.value))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Premium Rooms</label>
+                                        <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsPremium} onChange={e => setRoomsPremium(Number(e.target.value))} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Penthouse Rooms</label>
+                                        <input type="number" className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all font-bold" value={roomsPenthouse} onChange={e => setRoomsPenthouse(Number(e.target.value))} />
+                                    </div>
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Description</label>
+                                <textarea 
+                                    value={sectorDescription} 
+                                    onChange={(e) => setSectorDescription(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-cyan-500 outline-none transition-all h-24 resize-none"
+                                    placeholder="Describe the sector's purpose..."
+                                />
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsSectorModalOpen(false)}
+                                    className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    className="flex-1 py-3 bg-cyan-600 text-black rounded-xl hover:bg-cyan-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-cyan-500/20"
+                                >
+                                    {editingSector ? 'Update Sector' : 'Authorize Sector'}
+                                </button>
+                            </div>
+                        </form>
+                    </BaseModal>
 
                 {activeTab === 'jobs' && (
                     <section className="space-y-6">
@@ -835,139 +975,129 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                     </section>
                 )}
                     {/* Job Modal */}
-                    {isJobModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                            <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl relative overflow-y-auto max-h-[90vh] custom-scrollbar">
-                                <div className="absolute top-0 right-0 p-4">
-                                    <button onClick={() => setIsJobModalOpen(false)} className="text-slate-500 hover:text-white transition-colors">&times; Close</button>
-                                </div>
-                                <h3 className="text-2xl font-black font-mono text-amber-400 tracking-tight uppercase italic mb-6">
-                                    {editingJob ? 'Refactor Job' : 'Release Job Node'}
-                                </h3>
-                                <form onSubmit={saveJob} className="space-y-6">
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Job Title</label>
-                                        <input 
-                                            type="text" 
-                                            value={jobTitle} 
-                                            onChange={(e) => setJobTitle(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-bold"
-                                            placeholder="e.g. System Security"
-                                            required
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Pay ($)</label>
-                                            <input 
-                                                type="number" 
-                                                value={jobPay} 
-                                                onChange={(e) => setJobPay(Number(e.target.value))}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
-                                                min="0"
-                                                step="0.01"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Shift Duration (sec)</label>
-                                            <input 
-                                                type="number" 
-                                                value={jobDuration} 
-                                                onChange={(e) => setJobDuration(Number(e.target.value))}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
-                                                min="1"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Max Positions</label>
-                                            <input 
-                                                type="number" 
-                                                value={jobMaxPositions} 
-                                                onChange={(e) => setJobMaxPositions(Number(e.target.value))}
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
-                                                min="1"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="flex items-center">
-                                            <label className="flex items-center gap-3 cursor-pointer mt-4">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={jobIsManager} 
-                                                    onChange={(e) => setJobIsManager(e.target.checked)}
-                                                    className="w-5 h-5 accent-amber-500 rounded bg-white/5 border-white/10"
-                                                />
-                                                <span className="text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Manager Role</span>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sector</label>
-                                        <select 
-                                            value={jobSectorId} 
-                                            onChange={(e) => setJobSectorId(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-bold"
-                                            required
-                                        >
-                                            {departments.map(d => (
-                                                <option key={d.id} value={d.id} className="bg-slate-900">{d.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Requirements</label>
-                                        <input 
-                                            type="text" 
-                                            value={jobRequirements} 
-                                            onChange={(e) => setJobRequirements(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all"
-                                            placeholder="e.g. Strength: 5, Level: 2"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Daily Tasks (One per line)</label>
-                                        <div className="flex flex-wrap gap-2 mb-3">
-                                            {taskTags.map(tag => (
-                                                <button 
-                                                    key={tag.id}
-                                                    type="button"
-                                                    onClick={() => setJobTasks(prev => prev + (prev.trim() ? '\n' : '') + `[${tag.label}] `)}
-                                                    className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-mono text-pink-400 hover:border-pink-500 transition-all font-black uppercase"
-                                                >
-                                                    + {tag.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <textarea 
-                                            value={jobTasks} 
-                                            onChange={(e) => setJobTasks(e.target.value)}
-                                            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all h-24 resize-none"
-                                            placeholder="Task 1&#10;Task 2&#10;Task 3"
-                                        />
-                                    </div>
-                                    <div className="flex gap-4 pt-4">
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setIsJobModalOpen(false)}
-                                            className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button 
-                                            type="submit"
-                                            className="flex-1 py-3 bg-amber-600 text-black rounded-xl hover:bg-amber-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20"
-                                        >
-                                            {editingJob ? 'Update Node' : 'Initialize Node'}
-                                        </button>
-                                    </div>
-                                </form>
+                    <BaseModal isOpen={isJobModalOpen} onClose={() => setIsJobModalOpen(false)} title={editingJob ? 'Refactor Job' : 'Release Job Node'} titleColor="text-amber-400">
+                        <form onSubmit={saveJob} className="space-y-6">
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Job Title</label>
+                                <input 
+                                    type="text" 
+                                    value={jobTitle} 
+                                    onChange={(e) => setJobTitle(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-bold"
+                                    placeholder="e.g. System Security"
+                                    required
+                                />
                             </div>
-                        </div>
-                    )}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Pay ($)</label>
+                                    <input 
+                                        type="number" 
+                                        value={jobPay} 
+                                        onChange={(e) => setJobPay(Number(e.target.value))}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
+                                        min="0"
+                                        step="0.01"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Shift Duration (sec)</label>
+                                    <input 
+                                        type="number" 
+                                        value={jobDuration} 
+                                        onChange={(e) => setJobDuration(Number(e.target.value))}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
+                                        min="1"
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Max Positions</label>
+                                    <input 
+                                        type="number" 
+                                        value={jobMaxPositions} 
+                                        onChange={(e) => setJobMaxPositions(Number(e.target.value))}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-mono font-bold"
+                                        min="1"
+                                        required
+                                    />
+                                </div>
+                                <div className="flex items-center">
+                                    <label className="flex items-center gap-3 cursor-pointer mt-4">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={jobIsManager} 
+                                            onChange={(e) => setJobIsManager(e.target.checked)}
+                                            className="w-5 h-5 accent-amber-500 rounded bg-white/5 border-white/10"
+                                        />
+                                        <span className="text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Manager Role</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Sector</label>
+                                <select 
+                                    value={jobSectorId} 
+                                    onChange={(e) => setJobSectorId(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all font-bold"
+                                    required
+                                >
+                                    {departments.map(d => (
+                                        <option key={d.id} value={d.id} className="bg-slate-900">{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Requirements</label>
+                                <input 
+                                    type="text" 
+                                    value={jobRequirements} 
+                                    onChange={(e) => setJobRequirements(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all"
+                                    placeholder="e.g. Strength: 5, Level: 2"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest mb-2">Daily Tasks (One per line)</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {taskTags.map(tag => (
+                                        <button 
+                                            key={tag.id}
+                                            type="button"
+                                            onClick={() => setJobTasks(prev => prev + (prev.trim() ? '\n' : '') + `[${tag.label}] `)}
+                                            className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-mono text-pink-400 hover:border-pink-500 transition-all font-black uppercase"
+                                        >
+                                            + {tag.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <textarea 
+                                    value={jobTasks} 
+                                    onChange={(e) => setJobTasks(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-white focus:border-amber-500 outline-none transition-all h-24 resize-none"
+                                    placeholder="Task 1&#10;Task 2&#10;Task 3"
+                                />
+                            </div>
+                            <div className="flex gap-4 pt-4">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsJobModalOpen(false)}
+                                    className="flex-1 py-3 border border-white/10 text-slate-400 rounded-xl hover:bg-white/5 transition-all font-mono font-bold text-xs uppercase"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    className="flex-1 py-3 bg-amber-600 text-black rounded-xl hover:bg-amber-500 transition-all font-mono font-black text-xs uppercase tracking-widest shadow-lg shadow-amber-500/20"
+                                >
+                                    {editingJob ? 'Update Node' : 'Initialize Node'}
+                                </button>
+                            </div>
+                        </form>
+                    </BaseModal>
             </div>
         </div>
     );

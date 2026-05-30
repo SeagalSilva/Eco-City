@@ -17,6 +17,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**', // This allows any path under the hostname
       },
+      {
+        protocol: 'https',
+        hostname: 'img.icons8.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
   output: 'standalone',
