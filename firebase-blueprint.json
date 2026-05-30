@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "GameState": {
+      "title": "GameState",
+      "description": "User's current game progression",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "balance": { "type": "number" },
+        "assets": { "type": "array" },
+        "lastTurn": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "balance"]
+    },
+    "ChatHistory": {
+      "title": "ChatHistory",
+      "description": "Game interaction history",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "messages": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "messages"]
+    },
+    "Department": {
+      "title": "Department",
+      "description": "City departments like Bank, Government etc",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "headId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "Job opportunities in departments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "departmentId": { "type": "string" },
+        "pay": { "type": "number" },
+        "requirements": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "departmentId", "pay"]
+    },
+    "UserRole": {
+      "title": "UserRole",
+      "description": "Assigned roles like moderator, admin",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "moderator", "head", "user"] },
+        "departmentId": { "type": "string" }
+      },
+      "required": ["uid", "role"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User collection"
+    },
+    "/game_states/{userId}": {
+      "schema": { "$ref": "GameState" },
+      "description": "User's game state"
+    },
+    "/chat_histories/{userId}": {
+      "schema": { "$ref": "ChatHistory" },
+      "description": "User's chat history"
+    },
+    "/departments/{departmentId}": {
+      "schema": { "$ref": "Department" },
+      "description": "City departments"
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "Job" },
+      "description": "Available jobs"
+    },
+    "/roles/{userId}": {
+      "schema": { "$ref": "UserRole" },
+      "description": "User role assignments"
+    }
+  }
+}

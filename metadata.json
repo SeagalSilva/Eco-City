@@ -1,0 +1,6 @@
+{
+  "name": "Eco City",
+  "description": "A high-fidelity economic roleplay simulation. Manage assets, work jobs, and customize your living units in a responsive, cyberpunk-inspired web interface.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
