@@ -208,11 +208,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
     const submitNameChangeRequest = async () => {
         const trimmed = newName.trim();
         if (!trimmed) {
-            alert('Por favor introduza o novo nome desejado.');
+            alert('Please enter your desired new name.');
             return;
         }
         if (balance < 0.05) {
-            alert('Saldo insuficiente. Mudar de nome custa $0.05!');
+            alert('Insufficient balance. Changing your name costs $0.05!');
             return;
         }
 
@@ -223,23 +223,23 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
             // Publish request
             await push(ref(db, `government/name_changes`), {
                 uid: user.uid,
-                oldName: user.displayName || 'Sem Nome',
+                oldName: user.displayName || 'No Name',
                 newName: trimmed,
                 status: 'PENDING',
                 requestedAt: Date.now()
             });
 
-            alert('Pedido de alteração submetido com sucesso! Taxa de $0.05 cobrada.');
+            alert('Name change request submitted successfully! $0.05 fee charged.');
             setNewName('');
         } catch (e: any) {
-            alert('Erro ao registrar alteração: ' + e.message);
+            alert('Error registering change: ' + e.message);
         }
     };
 
     // Employee approves name change
     const approveNameChange = async (req: NameChange) => {
         try {
-            const employeeName = user.displayName || 'Funcionário Público';
+            const employeeName = user.displayName || 'Public Servant';
             // Update the request status
             await update(ref(db, `government/name_changes/${req.id}`), {
                 status: 'APPROVED',
@@ -254,9 +254,9 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 displayName: req.newName
             });
 
-            alert(`Alteração de nome para "${req.newName}" APRECIADA e APROVADA por ${employeeName}!`);
+            alert(`Name change to "${req.newName}" REVIEWED and APPROVED by ${employeeName}!`);
         } catch (e: any) {
-            alert('Erro ao aprovar proposta: ' + e.message);
+            alert('Error approving proposal: ' + e.message);
         }
     };
 
@@ -264,22 +264,22 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
     const submitComplaint = async () => {
         const desc = complaintDesc.trim();
         if (!desc) {
-            alert('Descreva a reclamação / denúncia.');
+            alert('Describe the complaint / report.');
             return;
         }
         if (rentedHomes.length === 0) {
-            alert('Erro: É obrigatório que possua pelo menos uma habitação/apartamento arrendado para receber correspondência oficial do governo.');
+            alert('Error: You must own at least one rented apartment to receive official government correspondence.');
             return;
         }
         if (!selectedAddress) {
-            alert('Por favor selecione o apartamento no qual quer receber as respostas governamentais.');
+            alert('Please select the apartment where you want to receive government responses.');
             return;
         }
 
         try {
             await push(ref(db, `government/complaints`), {
                 uid: user.uid,
-                complainantName: user.displayName || 'Anónimo',
+                complainantName: user.displayName || 'Anonymous',
                 description: desc,
                 status: 'PENDING',
                 requestedAt: Date.now(),
@@ -287,11 +287,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 sectorId
             });
 
-            alert('A sua queixa formosa foi registada oficialmente na Administração de Governo!');
+            alert('Your complaint has been formally registered with the Government Administration!');
             setComplaintDesc('');
             setSelectedAddress('');
         } catch (e: any) {
-            alert('Erro ao submeter queixa: ' + e.message);
+            alert('Error submitting complaint: ' + e.message);
         }
     };
 
@@ -299,12 +299,12 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
     const respondToComplaint = async (complaint: Complaint) => {
         const text = replyText.trim();
         if (!text) {
-            alert('Digite uma resposta válida.');
+            alert('Enter a valid response.');
             return;
         }
 
         try {
-            const senderTag = `Funcionário: ${user.displayName || 'Administrativo'}`;
+            const senderTag = `Employee: ${user.displayName || 'Administrative'}`;
 
             // Create Letter in Complainant Mailbox
             const letterRef = push(ref(db, `game_states/${complaint.uid}/mailbox`));
@@ -314,7 +314,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 message: text,
                 receivedAt: Date.now(),
                 type: 'GOVERNMENT_RESPONSE',
-                subject: 'Decisão Administrativo - Queixa',
+                subject: 'Administrative Decision - Complaint',
                 address: complaint.housingAddressId
             });
 
@@ -324,27 +324,27 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 response: text
             });
 
-            alert('Resposta enviada com sucesso para a caixa de correio do cidadão!');
+            alert('Response sent successfully to the citizen\'s mailbox!');
             setReplyText('');
             setActiveReplyId(null);
         } catch (e: any) {
-            alert('Erro ao despachar resposta: ' + e.message);
+            alert('Error dispatching response: ' + e.message);
         }
     };
 
     // Employee redirects complaint to Super Admin
     const redirectComplaintToAdmin = async (complaint: Complaint) => {
         try {
-            const helperName = user.displayName || 'Agente Governamental';
+            const helperName = user.displayName || 'Government Agent';
             await update(ref(db, `government/complaints/${complaint.id}`), {
                 status: 'REDIRECTED_TO_ADMIN',
                 redirectedByUid: user.uid,
                 redirectedByName: helperName
             });
 
-            alert('A queixa foi transferida com sucesso para apreciação superior do Administrador Geral!');
+            alert('The complaint has been successfully transferred for superior review by the General Administrator!');
         } catch (e: any) {
-            alert('Erro ao reencaminhar queixa: ' + e.message);
+            alert('Error redirecting complaint: ' + e.message);
         }
     };
 
@@ -353,11 +353,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
         e.preventDefault();
         const cleanName = newProjName.trim();
         if (!cleanName) {
-            alert('Indique o nome do edifício.');
+            alert('Please indicate the building name.');
             return;
         }
         if (!selectedCompId) {
-            alert('Escolha uma Empresa de Construção civil ativa no mapa.');
+            alert('Choose an active Construction Company from the map.');
             return;
         }
 
@@ -371,16 +371,16 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 progress: 0,
                 status: 'UNDER_CONSTRUCTION',
                 createdByUid: user.uid,
-                createdByName: user.displayName || 'Gestor Público',
+                createdByName: user.displayName || 'Public Manager',
                 createdAt: Date.now(),
                 deedClaimed: false
             });
 
-            alert(`Empreitada "${cleanName}" lançada com sucesso! Os engenheiros e operários da empresa contratada já podem progredir a obra.`);
+            alert(`Project "${cleanName}" launched successfully! Engineers and workers from the contracted company can now progress the work.`);
             setNewProjName('');
             setSelectedCompId('');
         } catch (e: any) {
-            alert('Erro de protocolo: ' + e.message);
+            alert('Protocol error: ' + e.message);
         }
     };
 
@@ -397,7 +397,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 name: proj.name,
                 type: proj.type,
                 icon: proj.icon || '🏢',
-                description: `Edifício público inovador construído sob diretivas governamentais em ${new Date().toLocaleDateString()}.`,
+                description: `Innovative public building constructed under government directives on ${new Date().toLocaleDateString()}.`,
                 createdAt: new Date().toISOString()
             };
 
@@ -427,9 +427,9 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 finalSectorId: newSectorId
             });
 
-            alert(`Parabéns! O Alvará de Funcionamento do "${proj.name}" foi registado. Você tornou-se o Administrador/Dono proprietário legítimo deste novo edifício com controlo total de contratações!`);
+            alert(`Congratulations! The Operation Permit for "${proj.name}" has been registered. You have become the legitimate Administrator/Owner of this new building with full hiring control!`);
         } catch (e: any) {
-            alert('Erro ao emitir alvará: ' + e.message);
+            alert('Error issuing permit: ' + e.message);
         }
     };
 
@@ -456,11 +456,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     <div className="flex items-center gap-2 mb-1">
                         <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                         <span className="text-[10px] font-mono font-black text-cyan-400 uppercase tracking-widest">
-                            {govtSubtype === 'FINANCE_AGENCY' ? 'Ministério das Finanças' : 'Gabinete de Atendimento Civil'}
+                            {govtSubtype === 'FINANCE_AGENCY' ? 'Ministry of Finance' : 'Citizen Service Office'}
                         </span>
                     </div>
                     <h3 className="font-black text-2xl text-white tracking-widest uppercase italic">
-                        {govtSubtype === 'FINANCE_AGENCY' ? 'Agência de Finanças' : 'Governo & Administração'}
+                        {govtSubtype === 'FINANCE_AGENCY' ? 'Finance Agency' : 'Government & Administration'}
                     </h3>
                 </div>
 
@@ -470,7 +470,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                         onClick={() => setActiveTab('citizen-desk')} 
                         className={`text-xs px-4 py-2 rounded-xl border font-mono font-bold uppercase transition-all tracking-wider ${activeTab === 'citizen-desk' ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30 shadow-lg shadow-cyan-500/5' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}
                     >
-                        Atendimento Público
+                        Public Service
                     </button>
                     
                     {isStaff && (
@@ -478,7 +478,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                             onClick={() => setActiveTab('staff-terminal')} 
                             className={`text-xs px-4 py-2 rounded-xl border font-mono font-bold uppercase transition-all tracking-wider ${activeTab === 'staff-terminal' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}
                         >
-                            Balcão de Funcionários {pendingComplaints.length + pendingNameChanges.length > 0 && (
+                            Staff Counter {pendingComplaints.length + pendingNameChanges.length > 0 && (
                                 <span className="ml-1.5 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-extrabold animate-bounce">
                                     {pendingComplaints.length + pendingNameChanges.length}
                                 </span>
@@ -492,13 +492,13 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                 onClick={() => setActiveTab('construction-control')} 
                                 className={`text-xs px-4 py-2 rounded-xl border font-mono font-bold uppercase transition-all tracking-wider ${activeTab === 'construction-control' ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}
                             >
-                                Plano de Obras
+                                Construction Plan
                             </button>
                             <button 
                                 onClick={() => setActiveTab('staff-management')} 
                                 className={`text-xs px-4 py-2 rounded-xl border font-mono font-bold uppercase transition-all tracking-wider ${activeTab === 'staff-management' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}
                             >
-                                Gerir Funcionários
+                                Manage Staff
                             </button>
                         </>
                     )}
@@ -513,35 +513,35 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-4">
                         <div className="flex gap-3 items-center mb-1">
                             <span className="text-xl">✍️</span>
-                            <h4 className="text-sm font-black text-white font-mono uppercase tracking-widest">Averbação de Nome Civil</h4>
+                            <h4 className="text-sm font-black text-white font-mono uppercase tracking-widest">Civil Name Registration</h4>
                         </div>
                         <p className="text-xs text-slate-400 leading-relaxed">
-                            Cidadãos podem requerer a alteração do seu nome oficial na rede urbana. Cada averbação custa <strong className="text-cyan-400 font-mono">$0.05</strong> e requer aprovação manual das autoridades.
+                            Citizens can request a change to their official name on the urban network. Each registration costs <strong className="text-cyan-400 font-mono">$0.05</strong> and requires manual approval from the authorities.
                         </p>
                         
                         <div className="space-y-3 pt-3">
                             <div className="text-xs text-slate-400">
-                                Nome atual: <span className="font-bold text-white font-mono">{user.displayName || 'Anónimo'}</span>
+                                Current Name: <span className="font-bold text-white font-mono">{user.displayName || 'Anonymous'}</span>
                             </div>
                             <input 
                                 type="text"
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
-                                placeholder="Insira o seu novo nome desejado..."
+                                placeholder="Enter your desired new name..."
                                 className="w-full bg-black/40 border border-white/15 rounded-xl px-4 py-3 text-xs text-white focus:border-cyan-500 outline-none transition-all font-mono"
                             />
                             <button 
                                 onClick={submitNameChangeRequest}
                                 className="w-full py-3 bg-cyan-600/10 hover:bg-cyan-600 border border-cyan-500/30 text-cyan-400 hover:text-black rounded-xl font-mono font-bold text-xs uppercase tracking-widest transition-all shadow-md shadow-cyan-950/20 active:scale-95"
                             >
-                                Submeter Pedido ($0.05)
+                                Submit Request ($0.05)
                             </button>
                         </div>
 
                         {/* Approved logs */}
                         <div className="pt-4 space-y-2">
                             <label className="block text-[9px] font-mono text-slate-500 uppercase tracking-widest">
-                                Histórico de Alterações Recentes
+                                Recent Changes History
                             </label>
                             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                                 {nameChangeHistory.filter(n => n.status === 'APPROVED').slice(-5).map(item => (
@@ -549,13 +549,13 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                         <div>
                                             <span className="text-slate-500">{item.oldName}</span> &rarr; <span className="text-cyan-400 font-bold">{item.newName}</span>
                                         </div>
-                                        <div className="text-[8px] text-slate-600 font-bold uppercase tracking-widest text-right">
-                                            Aprovador: {item.approvedBy || 'Sistema'}
+                                <div className="text-[10px] text-slate-600 font-bold uppercase tracking-widest text-right">
+                                            Approved by: {item.approvedBy || 'System'}
                                         </div>
                                     </div>
                                 ))}
                                 {nameChangeHistory.filter(n => n.status === 'APPROVED').length === 0 && (
-                                    <div className="text-[10px] text-slate-600 italic font-mono p-2">Sem registos oficiais lançados.</div>
+                                    <div className="text-[10px] text-slate-600 italic font-mono p-2">No official records found.</div>
                                 )}
                             </div>
                         </div>
@@ -565,23 +565,23 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-4">
                         <div className="flex gap-3 items-center mb-1">
                             <span className="text-xl">👁️</span>
-                            <h4 className="text-sm font-black text-white font-mono uppercase tracking-widest">Gabinete de Queixas e Reclamações</h4>
+                            <h4 className="text-sm font-black text-white font-mono uppercase tracking-widest">Office of Complaints and Claims</h4>
                         </div>
                         <p className="text-xs text-slate-400 leading-relaxed">
-                            Envie reclamações, propostas civis e feedback. Respostas oficiais serão enviadas fisicamente para a <strong className="text-cyan-400 font-mono">Caixa de Correio</strong> da residência indicada.
+                            Send complaints, civil proposals, and feedback. Official responses will be sent physically to the <strong className="text-cyan-400 font-mono">Mailbox</strong> of the indicated residence.
                         </p>
 
                         <div className="space-y-3 pt-3">
                             {rentedHomes.length === 0 ? (
                                 <div className="text-xs p-3.5 bg-red-950/20 border border-red-900/40 text-red-400 rounded-xl font-bold font-mono">
-                                    ⚠️ Sem Caixa Postal: Deve alugar um apartamento primeiro para que possa usufruir de correspondência administrativa do governo.
+                                    ⚠️ No Mailbox: You must rent an apartment first to be able to receive official government correspondence.
                                 </div>
                             ) : (
                                 <>
                                     <textarea 
                                         value={complaintDesc}
                                         onChange={(e) => setComplaintDesc(e.target.value)}
-                                        placeholder="Descreva detalhadamente a sua queixa ou sugestão governamental..."
+                                        placeholder="Describe your complaint or government suggestion in detail..."
                                         className="w-full bg-black/40 border border-white/15 rounded-xl p-4 text-xs text-white focus:border-cyan-500 outline-none transition-all h-24 resize-none font-mono"
                                     />
                                     
@@ -594,10 +594,10 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                             onChange={(e) => setSelectedAddress(e.target.value)}
                                             className="w-full bg-black/40 border border-white/15 rounded-xl px-3 py-2.5 text-xs text-white focus:border-cyan-500 outline-none transition-all font-mono"
                                         >
-                                            <option value="">-- Escolher Apartamento --</option>
+                                            <option value="">-- Choose Apartment --</option>
                                             {rentedHomes.map(([id, apt]) => (
                                                 <option key={id} value={id} className="bg-slate-950 text-white font-mono text-xs">
-                                                    Morada: {apt.name || 'Setor'} (Inst: #{apt.roomId})
+                                                    Address: {apt.name || 'Sector'} (Room: #{apt.roomId})
                                                 </option>
                                             ))}
                                         </select>
@@ -607,7 +607,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                         onClick={submitComplaint}
                                         className="w-full py-3 bg-amber-500/10 hover:bg-amber-500 hover:text-black border border-amber-500/20 rounded-xl font-mono font-bold text-xs uppercase tracking-widest transition-all active:scale-95 shadow-md shadow-amber-950/20"
                                     >
-                                        Enviar Reclamação Oficial
+                                        Send Official Complaint
                                     </button>
                                 </>
                             )}
@@ -622,36 +622,36 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     
                     <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-6">
                         <div className="flex justify-between items-center">
-                            <h4 className="text-md font-black text-rose-400 font-mono uppercase tracking-widest">Pedidos de Nome Civil Pendentes</h4>
-                            <span className="text-xs bg-cyan-950 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-mono font-bold">{pendingNameChanges.length} Propostas</span>
+                            <h4 className="text-md font-black text-rose-400 font-mono uppercase tracking-widest">Pending Civil Name Requests</h4>
+                            <span className="text-xs bg-cyan-950 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full font-mono font-bold">{pendingNameChanges.length} Requests</span>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {pendingNameChanges.map(req => (
                                 <div key={req.id} className="p-4 bg-black/30 border border-white/5 rounded-2xl flex flex-col justify-between gap-4">
                                     <div className="space-y-1 font-mono text-xs">
-                                        <p className="text-slate-500">ID Utilizador: <span className="text-cyan-400 font-bold">{req.uid.slice(0, 8)}...</span></p>
-                                        <p className="text-slate-300 text-sm">Nome Atual: <strong className="text-white">{req.oldName}</strong></p>
-                                        <p className="text-slate-300 text-sm">Novo Nome: <strong className="text-cyan-300 font-bold text-md">{req.newName}</strong></p>
+                                        <p className="text-slate-500">User ID: <span className="text-cyan-400 font-bold">{req.uid.slice(0, 8)}...</span></p>
+                                        <p className="text-slate-300 text-sm">Current Name: <strong className="text-white">{req.oldName}</strong></p>
+                                        <p className="text-slate-300 text-sm">New Name: <strong className="text-cyan-300 font-bold text-md">{req.newName}</strong></p>
                                     </div>
                                     <button 
                                         onClick={() => approveNameChange(req)}
                                         className="py-2 bg-green-500/20 hover:bg-green-500 hover:text-black border border-green-500/30 text-green-400 font-bold font-mono text-[10px] uppercase tracking-widest rounded-xl transition-all"
                                     >
-                                        Aprovar & Atualizar Registo
+                                        Approve & Update Record
                                     </button>
                                 </div>
                             ))}
                             {pendingNameChanges.length === 0 && (
-                                <p className="text-slate-500 font-mono text-xs italic py-2 col-span-full">Nenhum pedido de alteração pendente de momento.</p>
+                                <p className="text-slate-500 font-mono text-xs italic py-2 col-span-full">No pending change requests at the moment.</p>
                             )}
                         </div>
                     </div>
 
                     <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-6">
                         <div className="flex justify-between items-center">
-                            <h4 className="text-md font-black text-rose-400 font-mono uppercase tracking-widest font-mono">Processamento de Reclamações Civis</h4>
-                            <span className="text-xs bg-amber-950 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full font-mono font-bold">{pendingComplaints.length} Ativos</span>
+                            <h4 className="text-md font-black text-rose-400 font-mono uppercase tracking-widest font-mono">Processing Civil Complaints</h4>
+                            <span className="text-xs bg-amber-950 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full font-mono font-bold">{pendingComplaints.length} Active</span>
                         </div>
 
                         <div className="space-y-4">
@@ -659,11 +659,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                 <div key={complaint.id} className="p-5 bg-black/30 border border-white/5 rounded-2xl space-y-4">
                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-white/5 pb-2">
                                         <div className="font-mono text-[11px]">
-                                            <span className="text-slate-400 font-bold uppercase">De:</span> <strong className="text-amber-400 italic">{complaint.complainantName}</strong>
+                                            <span className="text-slate-400 font-bold uppercase">From:</span> <strong className="text-amber-400 italic">{complaint.complainantName}</strong>
                                             <span className="text-slate-600 block">UID: {complaint.uid.slice(0,8)}...</span>
                                         </div>
                                         <div className="text-[10px] text-slate-500 font-mono">
-                                            Resposta a encaminhar para o Setor: <span className="text-white hover:underline">{complaint.housingAddressId}</span>
+                                            Response to be forwarded to Sector: <span className="text-white hover:underline">{complaint.housingAddressId}</span>
                                         </div>
                                         <div>
                                             <span className={`text-[9px] font-mono px-2 py-1 rounded font-bold uppercase tracking-wider ${complaint.status === 'REDIRECTED_TO_ADMIN' ? 'bg-red-500/20 text-red-400 border border-red-500/35' : 'bg-amber-500/20 text-amber-400 border border-amber-500/35'}`}>
@@ -679,7 +679,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                     {/* Handle redirected tags */}
                                     {complaint.status === 'REDIRECTED_TO_ADMIN' && (
                                         <p className="text-[10px] text-red-500/80 italic font-mono bg-red-950/10 p-2 border border-red-950/20 rounded">
-                                            Reencaminhado pelo Funcionário: <strong className="text-white">{complaint.redirectedByName}</strong> (Aguardando Parecer do Administrador Superior)
+                                            Redirected by Employee: <strong className="text-white">{complaint.redirectedByName}</strong> (Waiting for Superior Administrator&apos;s Opinion)
                                         </p>
                                     )}
 
@@ -693,14 +693,14 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                                 }}
                                                 className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500 hover:text-black rounded-lg text-xs font-mono font-bold uppercase"
                                             >
-                                                {activeReplyId === complaint.id ? 'Fechar Resposta' : 'Responder ao Cidadão'}
+                                                {activeReplyId === complaint.id ? 'Close Response' : 'Respond to Citizen'}
                                             </button>
                                             
                                             <button 
                                                 onClick={() => redirectComplaintToAdmin(complaint)}
                                                 className="px-4 py-2 bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs font-mono font-bold uppercase"
                                             >
-                                                Redirecionar ao Admin Superior
+                                                Redirect to Superior Admin
                                             </button>
                                         </div>
                                     )}
@@ -710,21 +710,21 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                             <textarea 
                                                 value={replyText}
                                                 onChange={(e) => setReplyText(e.target.value)}
-                                                placeholder="Escreva a resposta formal que será impressa e enviada à casa do queixoso..."
+                                                placeholder="Write the formal response that will be printed and sent to the complainant's home..."
                                                 className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:border-amber-500 outline-none h-20 resize-none font-mono"
                                             />
                                             <button 
                                                 onClick={() => respondToComplaint(complaint)}
                                                 className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-black py-2.5 rounded-xl font-mono text-xs font-bold uppercase tracking-wider"
                                             >
-                                                Despachar Carta Postal & Concluir
+                                                Dispatch Postal Letter & Conclude
                                             </button>
                                         </div>
                                     )}
                                 </div>
                             ))}
                             {pendingComplaints.length === 0 && (
-                                <p className="text-slate-500 font-mono text-xs italic py-2">Sem reclamações ativas em processamento.</p>
+                                <p className="text-slate-500 font-mono text-xs italic py-2">No active complaints in process.</p>
                             )}
                         </div>
                     </div>
@@ -739,23 +739,23 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-6">
                         <div className="flex items-center gap-3">
                             <span className="text-2xl">🏗️</span>
-                            <h4 className="text-md font-black text-purple-400 font-mono uppercase tracking-widest">Encomendar Nova Construção Civil</h4>
+                            <h4 className="text-md font-black text-purple-400 font-mono uppercase tracking-widest">Order New Civil Construction</h4>
                         </div>
                         
                         <form onSubmit={createConstructionProject} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Nome do Edifício</label>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Building Name</label>
                                     <input 
                                         type="text"
                                         value={newProjName}
                                         onChange={(e) => setNewProjName(e.target.value)}
-                                        placeholder="e.g. Banco do Norte, Restaurante Central"
+                                        placeholder="e.g. Northern Bank, Central Restaurant"
                                         className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-purple-500 outline-none font-mono font-bold"
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Tipo de Negócio / Setor</label>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Business Type / Sector</label>
                                     <select
                                         value={newProjType}
                                         onChange={(e) => setNewProjType(e.target.value)}
@@ -772,7 +772,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                             <div className="p-4 bg-purple-950/15 rounded-2xl border border-purple-500/20 space-y-3">
                                 <div className="flex justify-between items-center">
                                     <label className="block text-[10px] font-mono text-purple-300 font-black uppercase tracking-widest">
-                                        🌸 Ícone do Prédio (Pesquisa Icons8)
+                                        🌸 Building Icon (Icons8 search)
                                     </label>
                                     {sectorIcon && sectorIcon.startsWith('http') && (
                                         <img src={sectorIcon} alt="Preview" className="w-8 h-8 object-contain bg-black/30 p-1 rounded" />
@@ -798,7 +798,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                         onClick={handleIcons8Search}
                                         className="px-3 py-2 bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white rounded-xl font-mono text-xs uppercase"
                                     >
-                                        Procurar
+                                        Search
                                     </button>
                                 </div>
 
@@ -820,7 +820,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Empreiteira Contratada (Empresa de Construção civil)</label>
+                                    <label className="block text-[10px] font-mono text-slate-500 font-black uppercase tracking-widest">Contracted Contractor (Construction Company)</label>
                                     <select
                                         value={selectedCompId}
                                         onChange={(e) => setSelectedCompId(e.target.value)}
@@ -840,7 +840,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                         type="submit"
                                         className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-black font-black font-mono text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg hover:shadow-purple-500/25 active:scale-95"
                                     >
-                                        Lançar Empreitada de Obra ($1.00 USD)
+                                        Launch Construction Project ($1.00 USD)
                                     </button>
                                 </div>
                             </div>
@@ -875,7 +875,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                             <div className="flex justify-between text-[10px] font-mono text-slate-400 font-bold">
                                                 <span>Progresso da Estrutura</span>
                                                 <span className={`${proj.progress === 100 ? 'text-green-400 animate-pulse font-extrabold' : 'text-purple-400'}`}>
-                                                    {proj.progress}% {proj.progress === 100 ? '(CONCLUÍDO)' : '(EM CONST.)'}
+                                                    {proj.progress}% {proj.progress === 100 ? '(COMPLETED)' : '(IN CONST.)'}
                                                 </span>
                                             </div>
                                             <div className="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-white/5">
@@ -892,15 +892,15 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                                     onClick={() => issueSectorDeedAndOwnership(proj)}
                                                     className="w-full py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black font-black font-mono text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
                                                 >
-                                                    📜 Emitir Alvará de Funcionamento e Posse
+                                                    📜 Issue Operation and Ownership Permit
                                                 </button>
                                                 <p className="text-[9px] text-slate-400 text-center mt-2 italic">
-                                                    Converte a obra finalizada num edifício oficial ativo no City Map. O seu ID torna-se automaticamente Dono/Gestor legítimo!
+                                                    Converts the finished work into an official active building on the City Map. Your ID automatically becomes an official Owner/Manager!
                                                 </p>
                                             </div>
                                         ) : (
                                             <div className="text-[10px] text-center text-slate-500 italic p-3 font-mono border border-dashed border-white/15 rounded-xl">
-                                                Aguardando que os operários da construtora executem as ações de obra (no Sector da Construtora) para evoluir a estrutura.
+                                                Waiting for construction workers to execute the construction actions (in the Contractor&apos;s Sector) to evolve the structure.
                                             </div>
                                         )}
                                     </div>

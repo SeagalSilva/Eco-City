@@ -416,10 +416,10 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
             ];
 
             const defaultItemDefs = [
-                { name: 'Cama', icon: '🛏️' },
-                { name: 'Geleira', icon: '🧊' },
-                { name: 'Fogão', icon: '🍳' },
-                { name: 'Guarda fato', icon: '👕' },
+                { name: 'Bed', icon: '🛏️' },
+                { name: 'Fridge', icon: '🧊' },
+                { name: 'Stove', icon: '🍳' },
+                { name: 'Wardrobe', icon: '👕' },
                 { name: 'PC', icon: '💻' }
             ];
 

@@ -206,7 +206,7 @@ export default function WorkView({ district, onBack }: { district: string | null
                     }
                     return proj;
                 });
-                alert('Missão Concluída! Adicionou +10% de progresso à empreitada civil contratada.');
+                alert('Mission Completed! Added +10% progress to the contracted construction project.');
             } else {
                 alert('Task completed successfully!');
             }
@@ -386,7 +386,7 @@ export default function WorkView({ district, onBack }: { district: string | null
                                                ))}
                                            </select>
                                            <p className="text-[9px] text-slate-500 leading-normal text-center italic">
-                                               Garante o envio de esforços (+10% por missão) para concluir a infraestrutura.
+                                               Guarantees the effort delivery (+10% per mission) to complete the infrastructure.
                                            </p>
                                        </div>
                                    )}

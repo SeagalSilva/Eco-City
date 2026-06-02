@@ -215,27 +215,24 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     };
 
     const handleCheckout = async () => {
-        triggerConfirmation('Checkout Confirm', "Are you sure you want to check out of your unit?", async () => {
-            const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-            const aptData = snap.val();
+        const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+        const aptData = snap.val();
 
-            if (aptData) {
-                const timeRentedMs = Date.now() - aptData.rentedAt;
-                const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
-                
-                await push(ref(db, `departments/${sectorId}/roomsToClean`), {
-                    roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
-                    type: aptData.type,
-                    timeRented: timeRentedMs,
-                    cleaningTimeMs
-                });
-                
-                await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
-                await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-                alert('Checked out successfully.');
-                setView('menu');
-            }
-        });
+        if (aptData) {
+            const timeRentedMs = Date.now() - aptData.rentedAt;
+            const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
+            
+            await push(ref(db, `departments/${sectorId}/roomsToClean`), {
+                roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
+                type: aptData.type,
+                timeRented: timeRentedMs,
+                cleaningTimeMs
+            });
+            
+            await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
+            await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+            setView('menu');
+        }
     };
 
     if (view === 'mailbox') {
@@ -250,22 +247,22 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                     <div className="flex items-center gap-3">
                         <span className="text-3xl">📬</span>
                         <div>
-                            <h3 className="font-extrabold text-xl text-white tracking-tight uppercase italic">Caixa de Correio Civil</h3>
-                            <p className="text-[10px] text-slate-500 font-mono">Residência no Setor: {sectorId.slice(0, 8)}</p>
+                            <h3 className="font-extrabold text-xl text-white tracking-tight uppercase italic">Civil Mailbox</h3>
+                            <p className="text-[10px] text-slate-500 font-mono">Residence in Sector: {sectorId.slice(0, 8)}</p>
                         </div>
                     </div>
                     <button 
                         onClick={() => { setView('menu'); setSelectedLetter(null); }} 
                         className="text-xs font-mono px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all uppercase tracking-widest"
                     >
-                        Voltar
+                        Back
                     </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                     {/* Letters list */}
                     <div className="space-y-3">
-                        <h4 className="text-xs font-mono text-slate-500 uppercase tracking-widest">Envelopes Recebidos</h4>
+                        <h4 className="text-xs font-mono text-slate-500 uppercase tracking-widest">Received Envelopes</h4>
                         {letters.map((letter) => (
                             <button 
                                 key={letter.id}
@@ -274,9 +271,9 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                             >
                                 <div className="space-y-1">
                                     <p className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
-                                        <span>💌</span> {letter.subject || 'Correspondência Oficial'}
+                                        <span>💌</span> {letter.subject || 'Official Correspondence'}
                                     </p>
-                                    <p className="text-[10px] text-slate-500 font-mono">Remetente: {letter.sender}</p>
+                                    <p className="text-[10px] text-slate-500 font-mono">Sender: {letter.sender}</p>
                                 </div>
                                 <span className="text-[9px] text-slate-600 font-mono">
                                     {new Date(letter.receivedAt).toLocaleDateString()}
@@ -285,7 +282,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                         ))}
                         {letters.length === 0 && (
                             <p className="text-xs text-slate-500 font-mono italic p-6 border border-dashed border-white/10 rounded-2xl text-center">
-                                Nenhum envelope na caixa dos correios de momento.
+                                No envelopes in the mailbox at the moment.
                             </p>
                         )}
                     </div>
@@ -294,20 +291,20 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                     <div className="p-6 bg-amber-50 rounded-3xl text-slate-900 border-2 border-amber-200 min-h-[250px] shadow-lg flex flex-col justify-between relative overflow-hidden">
                         {/* Stamp ornament */}
                         <div className="absolute top-4 right-4 w-12 h-12 border-2 border-dashed border-amber-800/20 text-amber-900/20 flex items-center justify-center font-mono font-bold text-[8px] uppercase tracking-widest select-none pointer-events-none">
-                            POSTAGEM
+                            POSTAGE
                         </div>
 
                         {selectedLetter ? (
                             <div className="space-y-6">
                                 <div className="border-b border-amber-900/10 pb-4">
                                     <p className="text-[9px] font-mono font-medium text-amber-800/80 mb-1">
-                                        DATA DE EXPEDIÇÃO: {new Date(selectedLetter.receivedAt).toLocaleString()}
+                                        SHIPPING DATE: {new Date(selectedLetter.receivedAt).toLocaleString()}
                                     </p>
                                     <p className="text-sm font-black tracking-tight text-amber-950 uppercase italic font-mono mb-2">
-                                        Assunto: {selectedLetter.subject || 'Sem Assunto'}
+                                        Subject: {selectedLetter.subject || 'No Subject'}
                                     </p>
                                     <p className="text-xs font-mono font-bold text-amber-900 flex items-center gap-1 text-slate-700">
-                                        Remetente oficial: {selectedLetter.sender || 'Governo'}
+                                        Official Sender: {selectedLetter.sender || 'Government'}
                                     </p>
                                 </div>
 
@@ -320,7 +317,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                                         onClick={() => deleteLetter(selectedLetter.id)}
                                         className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-mono font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all"
                                     >
-                                        Triturar Documento (Deletar)
+                                        Destroy Document (Delete)
                                     </button>
                                 </div>
                             </div>
@@ -328,7 +325,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                             <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
                                 <p className="text-amber-900/50 text-6xl select-none animate-bounce">📬</p>
                                 <p className="text-xs font-mono text-amber-900/60 font-black uppercase tracking-widest mt-4">
-                                    Selecione uma carta para ler o conteúdo oficial.
+                                Select a letter to read the official content.
                                 </p>
                             </div>
                         )}
@@ -339,7 +336,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     }
 
     if (view === 'my-apartment') {
-        return <ApartmentEditor user={user} sectorId={sectorId} onBack={() => setView('menu')} onCheckout={handleCheckout} />;
+        return <ApartmentEditor user={user} sectorId={sectorId} onBack={() => setView('menu')} onCheckout={handleCheckout} onConfirmAction={triggerConfirmation} />;
     }
 
     if (view === 'rent') {
@@ -546,8 +543,8 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                             </span>
                         )}
                     </div>
-                    <h3 className="font-black text-2xl text-slate-200 group-hover:text-cyan-400 transition-colors uppercase tracking-tight italic">Caixa Postal</h3>
-                    <p className="text-xs text-slate-400 mt-2 font-medium tracking-wide">Leia cartas oficiais enviadas pelo governo.</p>
+                    <h3 className="font-black text-2xl text-slate-200 group-hover:text-cyan-400 transition-colors uppercase tracking-tight italic">Mailbox</h3>
+                    <p className="text-xs text-slate-400 mt-2 font-medium tracking-wide">Read official letters sent by the government.</p>
                 </button>
             </div>
 

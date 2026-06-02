@@ -51,7 +51,7 @@ export default function ProfileModal({ user, onClose }: { user: User, onClose: (
                 </div>
                 <div className="space-y-2">
                     <div className="flex justify-between text-xs font-mono text-slate-400 uppercase">
-                        <span>XP para próximo nível</span>
+                        <span>XP for next level</span>
                         <span>{xpNeededForNext}</span>
                     </div>
                     <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">

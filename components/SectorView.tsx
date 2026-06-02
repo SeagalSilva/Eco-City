@@ -64,7 +64,7 @@ export default function SectorView({ user, sectorId, onBack }: { user: User, sec
         
         return (
             <div className="text-center p-12 bg-white/5 rounded-2xl border border-white/10 font-mono text-slate-400">
-                Menu de interação para {sector.type} será adicionado em breve.
+                Interaction menu for {sector.type} will be added soon.
             </div>
         );
     }

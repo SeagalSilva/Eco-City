@@ -253,7 +253,7 @@ export default function Game({ user }: { user: User }) {
                     <h2 className="text-4xl font-black font-mono text-indigo-400 tracking-tighter uppercase italic mb-4">Deep Sleep</h2>
                     <p className="text-indigo-300 font-mono tracking-widest mb-8">Restoring Stamina... (1 ⚡ / 2 min)</p>
                     {sleepStartTime && (
-                        <p className="text-slate-400 font-mono text-sm mb-4">Próximo lote em: {Math.floor(((120000 - ((currentTime - sleepStartTime) % 120000)) / 1000))} segundos</p>
+                        <p className="text-slate-400 font-mono text-sm mb-4">Next batch in: {Math.floor(((120000 - ((currentTime - sleepStartTime) % 120000)) / 1000))} seconds</p>
                     )}
                     <div className="text-3xl font-mono text-cyan-400 font-bold mb-12 tabular-nums">
                         ⚡ {displayStamina} / 100
