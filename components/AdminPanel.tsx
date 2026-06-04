@@ -62,7 +62,7 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
     const [roles, setRoles] = useState<RoleAssignment[]>([]);
     const [users, setUsers] = useState<UserData[]>([]);
     const [taskTags, setTaskTags] = useState<TaskTag[]>([]);
-    const [systemSettings, setSystemSettings] = useState({ taxiPrice: 15 });
+    const [systemSettings, setSystemSettings] = useState({ taxiPrice: 15, switchAccountFee: 0.10 });
     const [levels, setLevels] = useState<{ id: string, level: number, xpRequired: number, reward: string }[]>([]);
     const [activeTab, setActiveTab] = useState('settings');
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
@@ -144,7 +144,10 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
         });
         const unsubSettings = onValue(ref(db, 'system_settings'), (snapshot) => {
              const data = snapshot.val();
-             if (data) setSystemSettings({ taxiPrice: data.taxiPrice ?? 15 });
+             if (data) setSystemSettings({ 
+                 taxiPrice: data.taxiPrice ?? 15,
+                 switchAccountFee: data.switchAccountFee ?? 0.10 
+             });
         });
         const unsubLevels = onValue(ref(db, 'levels'), (snapshot) => {
             const data = snapshot.val();
@@ -517,6 +520,17 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                                     type="number" 
                                     value={systemSettings.taxiPrice} 
                                     onChange={e => setSystemSettings(s => ({ ...s, taxiPrice: parseFloat(e.target.value) || 0 }))}
+                                    className="flex-1 bg-black/40 border border-white/10 rounded p-2 text-white font-mono" 
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-[10px] text-slate-500 uppercase tracking-widest mb-1 font-mono">Account Switch Fee ($)</label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" 
+                                    value={systemSettings.switchAccountFee}
+                                    onChange={e => setSystemSettings(s => ({ ...s, switchAccountFee: parseFloat(e.target.value) || 0 }))}
                                     className="flex-1 bg-black/40 border border-white/10 rounded p-2 text-white font-mono" 
                                 />
                                 <button onClick={saveSystemSettings} className="px-4 bg-red-600/20 text-red-400 hover:bg-red-600 hover:text-white rounded font-mono text-xs uppercase tracking-widest transition-colors font-bold">Save</button>

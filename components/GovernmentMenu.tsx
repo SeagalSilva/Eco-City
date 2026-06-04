@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { ref, push, update, onValue, get, runTransaction, set } from 'firebase/database';
-import { User } from 'firebase/auth';
+import { User, signOut } from 'firebase/auth';
 import StaffManager from './StaffManager';
 import { useWorkPermissions } from '@/hooks/useWorkPermissions';
 
@@ -105,6 +105,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
     const [playerLandDeeds, setPlayerLandDeeds] = useState<any[]>([]);
     const [availableLandStock, setAvailableLandStock] = useState<number>(0);
     const [landPrice, setLandPrice] = useState<number>(50);
+    const [switchFee, setSwitchFee] = useState<number>(0.10);
 
     const SECTOR_TYPES = [
         { id: 'BANK', label: 'Bank' },
@@ -229,6 +230,11 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 setAvailableLandStock(10); // default 10 pieces of land
                 setLandPrice(50);
             }
+        });
+        
+        onValue(ref(db, 'system_settings'), (snapshot) => {
+            const data = snapshot.val();
+            if (data) setSwitchFee(data.switchAccountFee ?? 0.10);
         });
 
     }, [user.uid, sectorId]);
@@ -421,7 +427,16 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
         }
     };
 
-    // Manager issues the final corporate license deed to deploy the complete sector
+    const handleSwitchAccount = async () => {
+        if (balance < switchFee) {
+             alert(`Insufficient funds to switch account (Fee: $${switchFee.toFixed(2)})`);
+             return;
+        }
+        if (confirm(`Switch account for $${switchFee.toFixed(2)}?`)) {
+            await runTransaction(ref(db, `game_states/${user.uid}/balance`), (curr) => (curr || 0) - switchFee);
+            await signOut(auth);
+        }
+    };
     const issueSectorDeedAndOwnership = async (proj: ConstructionProject) => {
         try {
             // Deploy the new department to /departments path natively
@@ -983,6 +998,23 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
             {/* TAB CONTENT: ADMINISTRATION */}
             {activeTab === 'administration' && (
                 <div className="space-y-8 animate-in fade-in duration-300">
+                    
+                    <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-4">
+                        <div className="flex items-center gap-3">
+                            <span className="text-2xl">🔄</span>
+                            <h4 className="text-md font-black text-emerald-400 font-mono uppercase tracking-widest">Account Management</h4>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                            Need to switch to another Google account? You can do so here for a fee.
+                        </p>
+                        <button 
+                            onClick={handleSwitchAccount}
+                            className="w-full py-3 bg-red-600/20 border border-red-500/30 text-red-400 hover:bg-red-600 hover:text-white rounded-xl font-mono font-bold text-xs uppercase tracking-widest transition-all"
+                        >
+                            Switch Google Account ($ {switchFee.toFixed(2)})
+                        </button>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-4">
                             <div className="flex items-center gap-3">

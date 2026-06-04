@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import BaseModal from './BaseModal';
 
 export default function ProfileModal({ user, onClose }: { user: User, onClose: () => void }) {
-    const [stats, setStats] = useState({ level: 0, xp: 0 });
+    const [stats, setStats] = useState({ level: 0, xp: 0, balance: 0 });
     const [levels, setLevels] = useState<{ level: number, xpRequired: number }[]>([]);
 
     useEffect(() => {
@@ -15,7 +15,7 @@ export default function ProfileModal({ user, onClose }: { user: User, onClose: (
         const unsub = onValue(statsRef, (snapshot) => {
             if (snapshot.exists()) {
                 const data = snapshot.val();
-                setStats({ level: data.level ?? 0, xp: data.xp || 0 });
+                setStats({ level: data.level ?? 0, xp: data.xp || 0, balance: data.balance || 0 });
             }
         });
         const levelsRef = ref(db, 'levels');
