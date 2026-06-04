@@ -16,6 +16,7 @@ interface Department {
 import BankMenu from './BankMenu';
 import ApartmentsMenu from './ApartmentsMenu';
 import GovernmentMenu from './GovernmentMenu';
+import PoliceMenu from './PoliceMenu';
 
 import { get } from 'firebase/database';
 
@@ -61,6 +62,9 @@ export default function SectorView({ user, sectorId, onBack }: { user: User, sec
             return <GovernmentMenu user={user} sectorId={sector.id} />;
         }
 
+        if (sector.type === 'POLICE') {
+            return <PoliceMenu user={user} sectorId={sector.id} />;
+        }
         
         return (
             <div className="text-center p-12 bg-white/5 rounded-2xl border border-white/10 font-mono text-slate-400">

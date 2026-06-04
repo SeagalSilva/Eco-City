@@ -285,7 +285,30 @@ export default function AdminPanel({ user, onBack }: { user: User; onBack: () =>
                 await update(ref(db, `departments/${editingSector.id}`), sectorData);
                 alert('Sector updated successfully!');
             } else {
-                await push(ref(db, 'departments'), { ...sectorData, createdAt: new Date().toISOString() });
+                const newSectorRef = await push(ref(db, 'departments'), { ...sectorData, createdAt: new Date().toISOString() });
+                const newSectorId = newSectorRef.key;
+                
+                // Assign ownership to the state (Government)
+                const contractData = {
+                    type: 'EMPLOYMENT_CONTRACT',
+                    name: `State Ownership Deed: ${sectorData.name}`,
+                    icon: '📜',
+                    jobId: 'OWNER',
+                    jobTitle: 'State Administration',
+                    departmentId: newSectorId,
+                    isManager: true,
+                    employeeUid: 'GOVERNMENT',
+                    employeeName: 'Gov. Administration',
+                    hiredAt: Date.now(),
+                    expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year
+                    signed: true
+                };
+                
+                // Add document to the company's records
+                if (newSectorId) {
+                    await push(ref(db, `sectors/${newSectorId}/company_documents`), contractData);
+                }
+                
                 alert('Sector added successfully!');
             }
             setIsSectorModalOpen(false);

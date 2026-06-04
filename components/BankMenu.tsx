@@ -19,6 +19,8 @@ interface BankRequest {
     timestamp: number;
 }
 
+import { useWorkPermissions } from '@/hooks/useWorkPermissions';
+
 export default function BankMenu({ user, sectorId }: BankMenuProps) {
     const [balance, setBalance] = useState<number>(0);
     const [savings, setSavings] = useState<number>(0);
@@ -29,8 +31,7 @@ export default function BankMenu({ user, sectorId }: BankMenuProps) {
     const [recipientId, setRecipientId] = useState<string>('');
     
     // Auth & Employment state
-    const [isStaff, setIsStaff] = useState(false);
-    const [isManager, setIsManager] = useState(false);
+    const { isStaff, isManager } = useWorkPermissions(user, sectorId);
     
     // Setting state
     const [settings, setSettings] = useState({
@@ -44,27 +45,12 @@ export default function BankMenu({ user, sectorId }: BankMenuProps) {
 
     useEffect(() => {
         const stateRef = ref(db, `game_states/${user.uid}`);
-        const unsubscribe = onValue(stateRef, async (snapshot) => {
+        const unsubscribe = onValue(stateRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 setWallet(data.balance || 0);
                 setBalance(data.banks?.[sectorId]?.balance || 0);
                 setSavings(data.banks?.[sectorId]?.savings || 0);
-                
-                if (data.activeJobId) {
-                    const jobSnap = await get(ref(db, `jobs/${data.activeJobId}`));
-                    const jobData = jobSnap.val();
-                    if (jobData && jobData.departmentId === sectorId) {
-                        setIsStaff(true);
-                        if (jobData.isManager) setIsManager(true);
-                    } else {
-                        setIsStaff(false);
-                        setIsManager(false);
-                    }
-                } else {
-                    setIsStaff(false);
-                    setIsManager(false);
-                }
             }
         });
         

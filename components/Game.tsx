@@ -10,6 +10,7 @@ import AdminPanel from './AdminPanel';
 import ProfileModal from './ProfileModal';
 import Inventory from './Inventory';
 import SectorView from './SectorView';
+import BaseModal from './BaseModal';
 
 export default function Game({ user }: { user: User }) {
   const [balance, setBalance] = useState(0);
@@ -28,9 +29,13 @@ export default function Game({ user }: { user: User }) {
   const [pendingTravelId, setPendingTravelId] = useState<string | null>(null);
   const [taxiPrice, setTaxiPrice] = useState(15);
   
-  const isAdmin = user.email === 'seagalsilva@gmail.com';
+  const [isAdmin, setIsAdmin] = useState(false);
   
   useEffect(() => {
+    // Check if user is admin
+    const adminRef = ref(db, `admins/${user.uid}`);
+    const unsubAdmin = onValue(adminRef, (snap) => setIsAdmin(snap.exists() && snap.val() === true));
+
     const gameDocRef = ref(db, `game_states/${user.uid}`);
     const unsubscribe = onValue(gameDocRef, (snapshot) => {
         if (snapshot.exists()) {
@@ -74,7 +79,7 @@ export default function Game({ user }: { user: User }) {
         }
     });
 
-    return () => { unsubscribe(); unsubSettings(); };
+    return () => { unsubscribe(); unsubSettings(); unsubAdmin(); };
   }, [user.uid]);
 
   const handleDistrictSelect = (id: string) => {
@@ -203,14 +208,9 @@ export default function Game({ user }: { user: User }) {
             </div>
 
             {showProfile && <ProfileModal user={user} onClose={() => setShowProfile(false)} />}
-            {showInventory && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                    <div className="w-full max-w-lg relative">
-                        <button onClick={() => setShowInventory(false)} className="absolute -top-10 right-0 text-slate-500 hover:text-white">Close</button>
-                        <Inventory user={user} />
-                    </div>
-                </div>
-            )}
+            <BaseModal isOpen={showInventory} onClose={() => setShowInventory(false)} title="Inventory" titleColor="text-emerald-400">
+                <Inventory user={user} />
+            </BaseModal>
 
 
             <div className="flex flex-wrap items-center gap-3 md:gap-6 w-full md:w-auto">
@@ -314,45 +314,35 @@ export default function Game({ user }: { user: User }) {
             )}
         </main>
 
-        {pendingTravelId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-                <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] w-full max-w-lg p-8 shadow-2xl relative">
-                    <div className="absolute top-0 right-0 p-4">
-                        <button onClick={() => setPendingTravelId(null)} className="text-slate-500 hover:text-white transition-colors">&times; Close</button>
+        <BaseModal isOpen={!!pendingTravelId} onClose={() => setPendingTravelId(null)} title="Initiate Travel" titleColor="text-emerald-400">
+            <p className="text-sm text-slate-400 mb-8 max-w-sm">Select transportation method to reach your destination.</p>
+            
+            <div className="space-y-4">
+                <button onClick={() => startTravel(pendingTravelId!, 180000, 3)} className="w-full flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all font-mono group text-left">
+                    <div>
+                        <p className="font-bold text-white group-hover:text-emerald-400 flex items-center gap-2"><span className="text-xl">🚶</span> Walk</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">3 Minutes • Cost: ⚡ 3 Stamina</p>
                     </div>
-                    <h3 className="text-2xl font-black font-mono text-emerald-400 tracking-tight uppercase italic mb-2">
-                        Initiate Travel
-                    </h3>
-                    <p className="text-sm text-slate-400 mb-8 max-w-sm">Select transportation method to reach your destination.</p>
-                    
-                    <div className="space-y-4">
-                        <button onClick={() => startTravel(pendingTravelId, 180000, 3)} className="w-full flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all font-mono group text-left">
-                            <div>
-                                <p className="font-bold text-white group-hover:text-emerald-400 flex items-center gap-2"><span className="text-xl">🚶</span> Walk</p>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">3 Minutes • Cost: ⚡ 3 Stamina</p>
-                            </div>
-                            <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">Free</span>
-                        </button>
-                        
-                        <button onClick={() => {
-                            if (balance >= taxiPrice) {
-                                // Deduct taxiPrice and travel
-                                update(ref(db, `game_states/${user.uid}`), { balance: balance - taxiPrice });
-                                startTravel(pendingTravelId, 10000, 0);
-                            } else {
-                                alert('Not enough balance for a taxi.');
-                            }
-                        }} className="w-full flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-amber-500/10 hover:border-amber-500/30 transition-all font-mono group text-left">
-                            <div>
-                                <p className="font-bold text-white group-hover:text-amber-400 flex items-center gap-2"><span className="text-xl">🚕</span> Taxi</p>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">10 Seconds</p>
-                            </div>
-                            <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded">${taxiPrice.toFixed(2)}</span>
-                        </button>
+                    <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">Free</span>
+                </button>
+                
+                <button onClick={() => {
+                    if (balance >= taxiPrice) {
+                        // Deduct taxiPrice and travel
+                        update(ref(db, `game_states/${user.uid}`), { balance: balance - taxiPrice });
+                        startTravel(pendingTravelId!, 10000, 0);
+                    } else {
+                        alert('Not enough balance for a taxi.');
+                    }
+                }} className="w-full flex justify-between items-center p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-amber-500/10 hover:border-amber-500/30 transition-all font-mono group text-left">
+                    <div>
+                        <p className="font-bold text-white group-hover:text-amber-400 flex items-center gap-2"><span className="text-xl">🚕</span> Taxi</p>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">10 Seconds</p>
                     </div>
-                </div>
+                    <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded">${taxiPrice.toFixed(2)}</span>
+                </button>
             </div>
-        )}
+        </BaseModal>
     </div>
   );
 }

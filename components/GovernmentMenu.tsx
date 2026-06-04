@@ -4,6 +4,7 @@ import { db } from '@/lib/firebase';
 import { ref, push, update, onValue, get, runTransaction, set } from 'firebase/database';
 import { User } from 'firebase/auth';
 import StaffManager from './StaffManager';
+import { useWorkPermissions } from '@/hooks/useWorkPermissions';
 
 interface GovernmentMenuProps {
     user: User;
@@ -65,8 +66,7 @@ interface ConstructionCompany {
 export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) {
     const [govtSubtype, setGovtSubtype] = useState<string>('ADMINISTRATION');
     const [balance, setBalance] = useState(0);
-    const [isStaff, setIsStaff] = useState(false);
-    const [isManager, setIsManager] = useState(false);
+    const { isStaff, isManager, isAdmin } = useWorkPermissions(user, sectorId);
 
     // Visitor States: Name Change
     const [newName, setNewName] = useState('');
@@ -98,7 +98,13 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
 
     // Menu View State
     // Visitors go to 'citizen-desk', staff/managers can also see 'staff-terminal' or 'construction-agency'
-    const [activeTab, setActiveTab] = useState<'citizen-desk' | 'staff-terminal' | 'construction-control' | 'staff-management'>('citizen-desk');
+    const [activeTab, setActiveTab] = useState<'citizen-desk' | 'staff-terminal' | 'construction-control' | 'staff-management' | 'administration'>('citizen-desk');
+
+    // State Properties & Land
+    const [stateProperties, setStateProperties] = useState<any[]>([]);
+    const [playerLandDeeds, setPlayerLandDeeds] = useState<any[]>([]);
+    const [availableLandStock, setAvailableLandStock] = useState<number>(0);
+    const [landPrice, setLandPrice] = useState<number>(50);
 
     const SECTOR_TYPES = [
         { id: 'BANK', label: 'Bank' },
@@ -124,6 +130,12 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
             const data = snap.val();
             if (data) {
                 setBalance(data.balance || 0);
+                if (data.inventory) {
+                    const invList = Object.keys(data.inventory).map(k => ({id: k, ...data.inventory[k]}));
+                    setPlayerLandDeeds(invList.filter(i => i.type === 'LAND_DEED'));
+                } else {
+                    setPlayerLandDeeds([]);
+                }
                 if (data.rentedApartments) {
                     const entries = Object.entries(data.rentedApartments) as [string, RentedApartment][];
                     // Retrieve sector names of these sectors for beautiful listing
@@ -134,22 +146,6 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                     setRentedHomes(richEntries);
                 } else {
                     setRentedHomes([]);
-                }
-
-                // Check staff privileges
-                if (data.activeJobId) {
-                    const jobSnap = await get(ref(db, `jobs/${data.activeJobId}`));
-                    const jobData = jobSnap.val();
-                    if (jobData && jobData.departmentId === sectorId) {
-                        setIsStaff(true);
-                        setIsManager(!!jobData.isManager);
-                    } else {
-                        setIsStaff(false);
-                        setIsManager(false);
-                    }
-                } else {
-                    setIsStaff(false);
-                    setIsManager(false);
                 }
             }
         });
@@ -199,6 +195,39 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 setCurrentProjects(list);
             } else {
                 setCurrentProjects([]);
+            }
+        });
+
+        // Load State Properties
+        onValue(ref(db, `departments`), async (snap) => {
+            const val = snap.val();
+            if (val) {
+                const depList = Object.keys(val).map(k => ({ id: k, ...val[k] }));
+                const stateOwned: any[] = [];
+                for (const dep of depList) {
+                    const docsSnap = await get(ref(db, `sectors/${dep.id}/company_documents`));
+                    if (docsSnap.exists()) {
+                        const docs = docsSnap.val();
+                        Object.values(docs).forEach((doc: any) => {
+                            if (doc.type === 'EMPLOYMENT_CONTRACT' && doc.isManager && doc.employeeUid === 'GOVERNMENT') {
+                                stateOwned.push(dep);
+                            }
+                        });
+                    }
+                }
+                setStateProperties(stateOwned);
+            }
+        });
+
+        // Load Land stock and price
+        onValue(ref(db, `government`), (snap) => {
+            if (snap.exists()) {
+                const data = snap.val();
+                setAvailableLandStock(data.land_stock !== undefined ? data.land_stock : 10);
+                setLandPrice(data.land_price !== undefined ? data.land_price : 50);
+            } else {
+                setAvailableLandStock(10); // default 10 pieces of land
+                setLandPrice(50);
             }
         });
 
@@ -360,8 +389,16 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
             alert('Choose an active Construction Company from the map.');
             return;
         }
+        if (playerLandDeeds.length === 0) {
+            alert('You need a Land Plot Deed in your inventory to launch a new building! Buy one from the State.');
+            return;
+        }
 
         try {
+            // Consume 1 land deed
+            const deedToConsume = playerLandDeeds[0];
+            await set(ref(db, `game_states/${user.uid}/inventory/${deedToConsume.id}`), null);
+
             const projRef = push(ref(db, `construction_projects`));
             await set(projRef, {
                 name: cleanName,
@@ -376,7 +413,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 deedClaimed: false
             });
 
-            alert(`Project "${cleanName}" launched successfully! Engineers and workers from the contracted company can now progress the work.`);
+            alert(`Project "${cleanName}" launched successfully! Engineers and workers from the contracted company can now progress the work. Consumed 1 Land Deed.`);
             setNewProjName('');
             setSelectedCompId('');
         } catch (e: any) {
@@ -427,6 +464,28 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                 finalSectorId: newSectorId
             });
 
+            // Create Ownership Document
+            const contractData = {
+                type: 'EMPLOYMENT_CONTRACT',
+                name: `Ownership Deed: ${proj.name}`,
+                icon: '📜',
+                jobId: 'OWNER',
+                jobTitle: 'Owner / Administrator',
+                departmentId: newSectorId,
+                isManager: true,
+                employeeUid: user.uid,
+                employeeName: user.displayName || 'Anonymous',
+                hiredAt: Date.now(),
+                expiresAt: Date.now() + (365 * 24 * 60 * 60 * 1000), // 1 year
+                signed: false
+            };
+            
+            // Add to user inventory
+            await push(ref(db, `game_states/${user.uid}/inventory`), contractData);
+            
+            // Add duplicate to company records
+            await push(ref(db, `sectors/${newSectorId}/company_documents`), contractData);
+
             alert(`Congratulations! The Operation Permit for "${proj.name}" has been registered. You have become the legitimate Administrator/Owner of this new building with full hiring control!`);
         } catch (e: any) {
             alert('Error issuing permit: ' + e.message);
@@ -473,6 +532,13 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                         Public Service
                     </button>
                     
+                    <button 
+                        onClick={() => setActiveTab('administration')} 
+                        className={`text-xs px-4 py-2 rounded-xl border font-mono font-bold uppercase transition-all tracking-wider ${activeTab === 'administration' ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' : 'border-white/10 text-slate-400 hover:bg-white/5'}`}
+                    >
+                        Administration
+                    </button>
+
                     {isStaff && (
                         <button 
                             onClick={() => setActiveTab('staff-terminal')} 
@@ -679,7 +745,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                     {/* Handle redirected tags */}
                                     {complaint.status === 'REDIRECTED_TO_ADMIN' && (
                                         <p className="text-[10px] text-red-500/80 italic font-mono bg-red-950/10 p-2 border border-red-950/20 rounded">
-                                            Redirected by Employee: <strong className="text-white">{complaint.redirectedByName}</strong> (Waiting for Superior Administrator&apos;s Opinion)
+                                            Redirected by Employee: <strong className="text-white">{complaint.redirectedByName}</strong> (Waiting for Superior Administrator's Opinion)
                                         </p>
                                     )}
 
@@ -900,7 +966,7 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                                             </div>
                                         ) : (
                                             <div className="text-[10px] text-center text-slate-500 italic p-3 font-mono border border-dashed border-white/15 rounded-xl">
-                                                Waiting for construction workers to execute the construction actions (in the Contractor&apos;s Sector) to evolve the structure.
+                                                Waiting for construction workers to execute the construction actions (in the Contractor's Sector) to evolve the structure.
                                             </div>
                                         )}
                                     </div>
@@ -911,6 +977,112 @@ export default function GovernmentMenu({ user, sectorId }: GovernmentMenuProps) 
                             )}
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* TAB CONTENT: ADMINISTRATION */}
+            {activeTab === 'administration' && (
+                <div className="space-y-8 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="p-6 bg-white/5 border border-white/5 rounded-3xl space-y-4">
+                            <div className="flex items-center gap-3">
+                                <span className="text-2xl">🌍</span>
+                                <h4 className="text-md font-black text-indigo-400 font-mono uppercase tracking-widest">Real Estate State Agency</h4>
+                            </div>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                The government occasionally sells land plots for new businesses. You need a Land Plot Deed in your inventory to launch a new construction project.
+                            </p>
+                            
+                            <div className="flex justify-between items-center bg-black/40 p-4 rounded-xl border border-white/5">
+                                <div>
+                                    <p className="text-[10px] font-mono text-slate-500 uppercase font-black">State Stock</p>
+                                    <p className="font-mono text-2xl font-bold text-white">{availableLandStock} <span className="text-xs text-slate-500">Deeds available</span></p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-mono text-slate-500 uppercase font-black">Price</p>
+                                    <p className="font-mono text-xl font-bold text-emerald-400">${landPrice.toFixed(2)}</p>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={async () => {
+                                    if (availableLandStock <= 0) {
+                                        alert('The State has no land available at the moment.');
+                                        return;
+                                    }
+                                    if (balance < landPrice) {
+                                        alert(`Insufficient funds. A Land Deed costs $${landPrice.toFixed(2)}.`);
+                                        return;
+                                    }
+                                    try {
+                                        await runTransaction(ref(db, `game_states/${user.uid}/balance`), (curr) => (curr || 0) - landPrice);
+                                        await update(ref(db, 'government'), { land_stock: availableLandStock - 1 });
+                                        await push(ref(db, `game_states/${user.uid}/inventory`), {
+                                            type: 'LAND_DEED',
+                                            name: 'State Land Plot Deed',
+                                            icon: '🗺️',
+                                            purchasedAt: Date.now()
+                                        });
+                                        alert('Land Deed purchased successfully! It has been added to your inventory.');
+                                    } catch (e: any) {
+                                        alert('Error purchasing land: ' + e.message);
+                                    }
+                                }}
+                                disabled={availableLandStock <= 0}
+                                className={`w-full py-4 font-mono font-black uppercase text-xs rounded-xl transition-all ${availableLandStock > 0 ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'}`}
+                            >
+                                {availableLandStock > 0 ? 'Purchase Land Plot' : 'Out of Stock'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {isManager && (
+                        <div className="p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-3xl space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h4 className="font-bold text-indigo-400 font-mono uppercase text-sm flex items-center gap-2">
+                                    <span>🏛️</span> State Properties (Admin View)
+                                </h4>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            const newPrice = parseFloat(prompt('Set new land deed price:', landPrice.toString()) || '0');
+                                            if (newPrice > 0) {
+                                                await update(ref(db, 'government'), { land_price: newPrice });
+                                                alert(`Land price updated to $${newPrice.toFixed(2)}.`);
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-colors rounded text-xs font-mono font-bold uppercase"
+                                    >
+                                        Set Price
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            const qty = parseInt(prompt('How many land deeds to emit?', '5') || '0');
+                                            if (qty > 0) {
+                                                await update(ref(db, 'government'), { land_stock: availableLandStock + qty });
+                                                alert(`${qty} deeds emitted to the market.`);
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-indigo-500 text-white rounded text-xs font-mono font-bold uppercase transition-colors"
+                                    >
+                                        + Emit Land
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {stateProperties.length === 0 && <p className="text-slate-500 text-xs italic font-mono col-span-full">No state-owned properties found.</p>}
+                                {stateProperties.map(prop => (
+                                    <div key={prop.id} className="p-4 bg-black/40 border border-indigo-500/20 rounded-xl space-y-1">
+                                        <div className="flex gap-2 items-center text-white font-bold text-sm">
+                                            <span>{prop.icon || '🏢'}</span> {prop.name}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-mono">Type: {prop.type}</p>
+                                        <p className="text-[9px] text-indigo-400 font-mono uppercase mt-2">100% Owned by Government</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

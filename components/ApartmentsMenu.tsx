@@ -7,6 +7,7 @@ import { ref, onValue, update, get, push, remove } from 'firebase/database';
 import { User } from 'firebase/auth';
 import ApartmentEditor from './ApartmentEditor';
 import StaffManager from './StaffManager';
+import { useWorkPermissions } from '@/hooks/useWorkPermissions';
 
 interface RoomToClean {
     id: string;
@@ -21,8 +22,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     const [hasApartment, setHasApartment] = useState(false);
     const [rentedInfo, setRentedInfo] = useState<{type: string} | null>(null);
     const [balance, setBalance] = useState(0);
-    const [isStaff, setIsStaff] = useState(false);
-    const [isManager, setIsManager] = useState(false);
+    const { isStaff, isManager } = useWorkPermissions(user, sectorId);
     const [settings, setSettings] = useState({
         basic: 0,
         premium: 0,
@@ -47,7 +47,7 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
 
     useEffect(() => {
         const stateRef = ref(db, `game_states/${user.uid}`);
-        const unsub = onValue(stateRef, async (snapshot) => {
+        const unsub = onValue(stateRef, (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 setBalance(data.balance || 0);
@@ -57,21 +57,6 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                 } else {
                     setHasApartment(false);
                     setRentedInfo(null);
-                }
-
-                if (data.activeJobId) {
-                    const jobSnap = await get(ref(db, `jobs/${data.activeJobId}`));
-                    const jobData = jobSnap.val();
-                    if (jobData && jobData.departmentId === sectorId) {
-                        setIsStaff(true);
-                        if (jobData.isManager) setIsManager(true);
-                    } else {
-                        setIsStaff(false);
-                        setIsManager(false);
-                    }
-                } else {
-                    setIsStaff(false);
-                    setIsManager(false);
                 }
             }
         });
@@ -215,24 +200,27 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
     };
 
     const handleCheckout = async () => {
-        const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-        const aptData = snap.val();
+        triggerConfirmation('Checkout Confirm', "Are you sure you want to check out of your unit?", async () => {
+            const snap = await get(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+            const aptData = snap.val();
 
-        if (aptData) {
-            const timeRentedMs = Date.now() - aptData.rentedAt;
-            const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
-            
-            await push(ref(db, `departments/${sectorId}/roomsToClean`), {
-                roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
-                type: aptData.type,
-                timeRented: timeRentedMs,
-                cleaningTimeMs
-            });
-            
-            await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
-            await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
-            setView('menu');
-        }
+            if (aptData) {
+                const timeRentedMs = Date.now() - aptData.rentedAt;
+                const cleaningTimeMs = Math.min(30000, Math.max(5000, Math.floor(timeRentedMs / 60000) * 5000));
+                
+                await push(ref(db, `departments/${sectorId}/roomsToClean`), {
+                    roomId: aptData.roomId || Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
+                    type: aptData.type,
+                    timeRented: timeRentedMs,
+                    cleaningTimeMs
+                });
+                
+                await remove(ref(db, `departments/${sectorId}/rented_units/${aptData.roomId}`));
+                await remove(ref(db, `game_states/${user.uid}/rentedApartments/${sectorId}`));
+                alert('Checked out successfully.');
+                setView('menu');
+            }
+        });
     };
 
     if (view === 'mailbox') {
@@ -474,7 +462,6 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
         );
     }
 
-    const isAdmin = user.email === 'seagalsilva@gmail.com';
     return (
         <div className="space-y-8">
             <ConfirmationModal 
@@ -564,11 +551,11 @@ export default function ApartmentsMenu({ user, sectorId }: { user: User, sectorI
                 </div>
             )}
 
-            {isAdmin && (
+            {isManager && (
                 <div className="mt-8 p-8 bg-red-500/5 border border-red-500/20 rounded-3xl relative overflow-hidden">
                     <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
                         <div>
-                            <h3 className="font-black text-xl text-red-400 uppercase tracking-widest italic mb-1">System level override</h3>
+                            <h3 className="font-black text-xl text-red-400 uppercase tracking-widest italic mb-1">Company Management</h3>
                             <p className="text-sm text-slate-400 font-medium italic">Advanced residential sector management authorized for your ID.</p>
                         </div>
                         <button className="px-8 py-3 bg-red-600/20 border border-red-600/30 text-red-400 rounded-2xl hover:bg-red-600 hover:text-white transition-all font-mono font-bold text-xs uppercase tracking-widest">

@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { ref, onValue, update, runTransaction } from 'firebase/database';
+import { ref, onValue, update, push, runTransaction } from 'firebase/database';
 import { db, auth, handleDatabaseError, OperationType } from '@/lib/firebase';
 
 interface Job {
@@ -133,13 +133,20 @@ export default function WorkView({ district, onBack }: { district: string | null
         }
         
         try {
-            await update(ref(db, `game_states/${authUser.uid}`), {
-                activeJobId: job.id,
-                tasksCompletedToday: 0
+            await push(ref(db, `sectors/${job.departmentId}/job_applications`), {
+                jobId: job.id,
+                jobTitle: job.title,
+                departmentId: job.departmentId,
+                isManager: job.isManager || false,
+                applicantUid: authUser.uid,
+                applicantName: authUser.displayName || 'Anonymous',
+                status: 'PENDING',
+                appliedAt: Date.now()
             });
-            alert(`You are now working as ${job.title}!`);
+            
+            alert(`Application for ${job.title} submitted! Wait for HR or the Manager to approve it.`);
         } catch (e: any) {
-            handleDatabaseError(e, OperationType.UPDATE, `game_states/${authUser.uid}`);
+            handleDatabaseError(e, OperationType.UPDATE, `sectors/${job.departmentId}/job_applications`);
         }
     };
 
@@ -191,6 +198,15 @@ export default function WorkView({ district, onBack }: { district: string | null
             const newCount = (userWorkState?.tasksCompletedToday || 0) + 1;
             await update(ref(db, `game_states/${authUser.uid}`), {
                 tasksCompletedToday: newCount
+            });
+
+            // Log the action to the company records
+            await push(ref(db, `sectors/${activeJob.departmentId}/actions`), {
+                uid: authUser.uid,
+                employeeName: authUser.displayName || 'Anonymous',
+                jobTitle: activeJob.title,
+                actionDesc: `Completed task: ${activeTaskStr}`,
+                timestamp: Date.now()
             });
 
             // If working in construction and selected a pending project, progress it!

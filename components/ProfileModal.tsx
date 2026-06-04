@@ -4,6 +4,8 @@ import { db } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { useState, useEffect } from 'react';
 
+import BaseModal from './BaseModal';
+
 export default function ProfileModal({ user, onClose }: { user: User, onClose: () => void }) {
     const [stats, setStats] = useState({ level: 0, xp: 0 });
     const [levels, setLevels] = useState<{ level: number, xpRequired: number }[]>([]);
@@ -36,29 +38,23 @@ export default function ProfileModal({ user, onClose }: { user: User, onClose: (
         : 100;
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-[#111] border border-white/10 p-8 rounded-3xl max-w-sm w-full">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-black font-mono text-white">Profile</h2>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
-                </div>
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-2xl">👤</div>
-                    <div>
-                        <div className="font-bold text-lg">{user.displayName || 'User'}</div>
-                        <div className="text-sm text-emerald-400 font-mono">Level {stats.level}</div>
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    <div className="flex justify-between text-xs font-mono text-slate-400 uppercase">
-                        <span>XP for next level</span>
-                        <span>{xpNeededForNext}</span>
-                    </div>
-                    <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                        <div className="h-full bg-cyan-500 transition-all" style={{ width: `${progress}%` }} />
-                    </div>
+        <BaseModal isOpen={true} onClose={onClose} title="Profile" titleColor="text-emerald-400">
+            <div className="flex items-center gap-4 mb-8">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-2xl">👤</div>
+                <div>
+                    <div className="font-bold text-lg text-white">{user.displayName || 'User'}</div>
+                    <div className="text-sm text-emerald-400 font-mono">Level {stats.level}</div>
                 </div>
             </div>
-        </div>
+            <div className="space-y-2">
+                <div className="flex justify-between text-xs font-mono text-slate-400 uppercase">
+                    <span>XP for next level</span>
+                    <span>{xpNeededForNext}</span>
+                </div>
+                <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-500 transition-all" style={{ width: `${progress}%` }} />
+                </div>
+            </div>
+        </BaseModal>
     );
 }
